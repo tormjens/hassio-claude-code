@@ -1,19 +1,89 @@
 /**
  * Entry point: HTTP server (static UI + small JSON API) and the WebSocket
  * endpoint the chat UI talks to. Everything runs in this one process.
- *
- * Phase 1 skeleton: serves the UI, a health endpoint and an echo WebSocket so
- * ingress routing can be verified end to end.
  */
 import http from 'node:http';
 import fs from 'node:fs';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, type WebSocket } from 'ws';
 import { loadConfig, createLogger } from './config.js';
 import { createStaticHandler, ingressPath, isTrustedPeer, sendJson, sendText } from './http.js';
+import { SessionStore } from './store.js';
+import { AuditLog } from './audit.js';
+import { GitRepo } from './git.js';
+import { HaClient } from './ha-client.js';
+import { createHaTools, HA_SERVER_NAME, READ_ONLY_TOOLS } from './ha-tools.js';
+import { createHooksFactory } from './hooks.js';
+import { SessionManager } from './agent.js';
+import { buildSystemPromptAppend } from './system-prompt.js';
+import type { ClientMessage, ServerMessage, Settings } from './protocol.js';
 
 const config = loadConfig();
 const log = createLogger(config.logLevel);
-const allowAnyPeer = process.env.CLAUDE_HA_ALLOW_ANY_PEER === '1' || !fs.existsSync('/data/options.json');
+const insideAddon = fs.existsSync('/data/options.json');
+const allowAnyPeer = process.env.CLAUDE_HA_ALLOW_ANY_PEER === '1' || !insideAddon;
+
+fs.mkdirSync(config.dataDir, { recursive: true });
+const store = new SessionStore(config.dataDir);
+const audit = new AuditLog(config.dataDir);
+const git = new GitRepo(config.configDir);
+const ha = new HaClient({ baseUrl: config.supervisorUrl, token: config.supervisorToken });
+
+let haVersion: string | undefined;
+let gitEnabled = false;
+try {
+  gitEnabled = await git.isRepo();
+} catch {
+  gitEnabled = false;
+}
+if (ha.configured) {
+  try {
+    const info = await ha.coreInfo();
+    haVersion = typeof info.version === 'string' ? info.version : undefined;
+    log.info(`Home Assistant Core ${haVersion ?? '(unknown version)'} reachable via Supervisor`);
+  } catch (err) {
+    log.warning(`Supervisor API not reachable yet: ${(err as Error).message}`);
+  }
+} else {
+  log.warning('SUPERVISOR_TOKEN is not set: Home Assistant tools will fail until the add-on runs under the Supervisor');
+}
+
+const haTools = createHaTools({ ha, configDir: config.configDir });
+const sessions = new SessionManager({
+  config,
+  store,
+  log,
+  audit,
+  mcpServers: { [HA_SERVER_NAME]: haTools },
+  readOnlyTools: READ_ONLY_TOOLS,
+  hooksFactory: createHooksFactory({ ha, git, audit, store, log, configDir: config.configDir }),
+  systemPromptAppend: buildSystemPromptAppend(config, { haVersion, gitEnabled }),
+});
+
+/** An API key, a gateway that authenticates itself, or one of the SDK's alternative tokens. */
+function hasCredentials(): boolean {
+  return Boolean(
+    config.anthropicApiKey ||
+      config.anthropicBaseUrl ||
+      process.env.ANTHROPIC_AUTH_TOKEN ||
+      process.env.CLAUDE_CODE_OAUTH_TOKEN,
+  );
+}
+
+function settings(): Settings {
+  return {
+    model: config.model,
+    baseUrl: config.anthropicBaseUrl,
+    autoApproveReadOnly: config.autoApproveReadOnly,
+    hasApiKey: hasCredentials(),
+    logLevel: config.logLevel,
+    configDir: config.configDir,
+    version: config.version,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// HTTP
+// ---------------------------------------------------------------------------
 
 const serveStatic = createStaticHandler(config.publicDir);
 
@@ -30,8 +100,28 @@ const server = http.createServer(async (req, res) => {
         version: config.version,
         ingressPath: ingressPath(req),
         configDir: config.configDir,
-        hasApiKey: Boolean(config.anthropicApiKey),
+        hasApiKey: hasCredentials(),
+        supervisor: ha.configured,
       });
+      return;
+    }
+    if (url.pathname === '/api/audit') {
+      const n = Number(url.searchParams.get('n') ?? 200);
+      sendJson(res, 200, audit.tail(Number.isFinite(n) ? n : 200));
+      return;
+    }
+    if (url.pathname === '/api/sessions' && req.method === 'GET') {
+      sendJson(res, 200, store.list());
+      return;
+    }
+    const diffMatch = /^\/api\/sessions\/([a-zA-Z0-9-]+)\/diff$/.exec(url.pathname);
+    if (diffMatch) {
+      const s = store.get(diffMatch[1]);
+      if (!s?.checkpointCommit) {
+        sendText(res, 404, 'No checkpoint for this session');
+        return;
+      }
+      sendText(res, 200, await git.diffSince(s.checkpointCommit));
       return;
     }
     if (url.pathname.startsWith('/api/')) {
@@ -50,6 +140,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// WebSocket
+// ---------------------------------------------------------------------------
+
 const wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
@@ -67,20 +161,173 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
-wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'hello', version: config.version }));
-  ws.on('message', (data) => ws.send(JSON.stringify({ type: 'echo', data: data.toString() })));
+function send(ws: WebSocket, msg: ServerMessage): void {
+  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+}
+
+/** Everyone connected sees session list changes and git status. */
+function broadcast(msg: ServerMessage): void {
+  for (const client of wss.clients) send(client, msg);
+}
+
+async function gitStatus() {
+  return git.status();
+}
+
+wss.on('connection', async (ws) => {
+  const subscriptions = new Map<string, () => void>();
+
+  send(ws, { type: 'hello', sessions: store.list(), settings: settings(), git: await gitStatus() });
+
+  const subscribe = (sessionId: string) => {
+    if (subscriptions.has(sessionId)) return;
+    const rt = sessions.get(sessionId);
+    if (!rt) {
+      send(ws, { type: 'error', sessionId, message: 'Unknown session' });
+      return;
+    }
+    const unsub = rt.subscribe((msg) => {
+      send(ws, msg);
+      if (msg.type === 'session') broadcast({ type: 'sessions', sessions: store.list() });
+    });
+    subscriptions.set(sessionId, unsub);
+    const stored = store.get(sessionId);
+    send(ws, {
+      type: 'history',
+      sessionId,
+      items: stored?.items ?? [],
+      status: rt.status,
+      pending: rt.pendingPermissions(),
+    });
+  };
+
+  ws.on('message', async (data) => {
+    let msg: ClientMessage;
+    try {
+      msg = JSON.parse(data.toString()) as ClientMessage;
+    } catch {
+      send(ws, { type: 'error', message: 'Invalid JSON' });
+      return;
+    }
+    try {
+      switch (msg.type) {
+        case 'list_sessions':
+          send(ws, { type: 'sessions', sessions: store.list() });
+          break;
+        case 'new_session': {
+          const rt = sessions.create(msg.permissionMode ?? 'ask');
+          broadcast({ type: 'sessions', sessions: store.list() });
+          subscribe(rt.id);
+          break;
+        }
+        case 'subscribe':
+          subscribe(msg.sessionId);
+          break;
+        case 'unsubscribe':
+          subscriptions.get(msg.sessionId)?.();
+          subscriptions.delete(msg.sessionId);
+          break;
+        case 'send': {
+          if (!hasCredentials()) {
+            send(ws, {
+              type: 'error',
+              sessionId: msg.sessionId,
+              message: 'No Anthropic API key configured. Add it in the add-on configuration and restart the add-on.',
+            });
+            break;
+          }
+          const rt = sessions.get(msg.sessionId);
+          if (!rt) throw new Error('Unknown session');
+          subscribe(msg.sessionId);
+          await rt.send(msg.text);
+          break;
+        }
+        case 'interrupt':
+          await sessions.get(msg.sessionId)?.interrupt();
+          break;
+        case 'set_permission_mode':
+          await sessions.get(msg.sessionId)?.setPermissionMode(msg.mode);
+          break;
+        case 'permission_response': {
+          const rt = sessions.get(msg.sessionId);
+          if (!rt?.resolvePermission(msg.requestId, msg.decision)) {
+            send(ws, { type: 'error', sessionId: msg.sessionId, message: 'That permission request is no longer pending.' });
+          }
+          break;
+        }
+        case 'rename_session': {
+          const s = store.get(msg.sessionId);
+          if (s) {
+            s.title = msg.title.trim().slice(0, 80) || s.title;
+            store.touch(s.id);
+            broadcast({ type: 'sessions', sessions: store.list() });
+          }
+          break;
+        }
+        case 'delete_session':
+          subscriptions.get(msg.sessionId)?.();
+          subscriptions.delete(msg.sessionId);
+          await sessions.delete(msg.sessionId);
+          broadcast({ type: 'sessions', sessions: store.list() });
+          break;
+        case 'git_init':
+          await git.init();
+          gitEnabled = true;
+          broadcast({ type: 'git', git: await gitStatus() });
+          break;
+        case 'revert_session': {
+          const s = store.get(msg.sessionId);
+          if (!s?.checkpointCommit) throw new Error('This session has no checkpoint to revert to.');
+          const rt = sessions.get(msg.sessionId);
+          const result = await git.revertTo(s.checkpointCommit, `session ${s.id.slice(0, 8)}`);
+          s.reverted = true;
+          store.touch(s.id);
+          rt?.context().note(
+            'info',
+            result.changed
+              ? `Reverted this session's file changes (commit ${result.commit?.slice(0, 7)}). Run a config check and reload if needed.`
+              : 'Nothing to revert: the configuration matches the checkpoint.',
+          );
+          rt?.context().emit({ type: 'session', session: store.summary(s) });
+          broadcast({ type: 'git', git: await gitStatus() });
+          break;
+        }
+        default:
+          send(ws, { type: 'error', message: `Unknown message type ${(msg as { type: string }).type}` });
+      }
+    } catch (err) {
+      log.warning(`ws ${msg.type} failed`, err);
+      send(ws, { type: 'error', sessionId: 'sessionId' in msg ? msg.sessionId : undefined, message: (err as Error).message });
+    }
+  });
+
+  ws.on('close', () => {
+    for (const unsub of subscriptions.values()) unsub();
+    subscriptions.clear();
+  });
 });
+
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
 
 server.listen(config.port, '0.0.0.0', () => {
   log.info(`Claude for Home Assistant ${config.version} listening on :${config.port}`);
+  log.info(`config dir: ${config.configDir}, data dir: ${config.dataDir}, ui: ${config.publicDir}`);
   if (!config.anthropicApiKey) log.warning('ANTHROPIC_API_KEY is not set');
+  if (config.model) log.info(`model: ${config.model}`);
+  if (config.anthropicBaseUrl) log.info(`base url: ${config.anthropicBaseUrl}`);
 });
 
+let shuttingDown = false;
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(sig, () => {
+  process.on(sig, async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     log.info(`received ${sig}, shutting down`);
+    setTimeout(() => process.exit(0), 5000).unref();
+    await sessions.closeAll().catch(() => undefined);
+    await store.flushAll().catch(() => undefined);
     server.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 3000).unref();
   });
 }
