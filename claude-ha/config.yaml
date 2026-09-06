@@ -1,17 +1,18 @@
 # Home Assistant add-on manifest.
 # Reference: https://developers.home-assistant.io/docs/apps/configuration
 name: Claude for Home Assistant
-version: 0.1.1
+version: 0.1.2
 slug: claude_ha
 description: Chat with Claude to read, edit and validate your Home Assistant configuration
 url: https://github.com/tormjens/hassio-claude-code
 arch:
   - amd64
   - aarch64
-# The image is built locally by the Supervisor until the GitHub Actions
-# workflow has published images. Uncomment once ghcr.io/tormjens/claude-ha
-# carries a tag matching `version`.
-# image: ghcr.io/tormjens/claude-ha
+# Built locally by the Supervisor until the GitHub Actions workflow has
+# published images. After the first successful run of .github/workflows/build.yaml
+# (check the Actions tab, and make the ghcr.io packages public), uncomment the
+# next line to install a prebuilt image instead of building on-device:
+# image: ghcr.io/tormjens/{arch}-claude-ha
 # The HA base image ships s6-overlay v3, which must run as PID 1.
 init: false
 startup: application

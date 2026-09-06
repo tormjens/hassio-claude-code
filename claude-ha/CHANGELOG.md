@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.2
+
+- Security: the model's subprocess no longer receives the Supervisor token, and
+  the add-on's private `/data` directory (credentials, sessions, audit log) plus
+  credential environment variables are blocked from all tools. This prevents a
+  shell command from reading tokens and calling the Supervisor API directly,
+  bypassing the tool guards.
+- Add a GitHub Actions workflow that builds and publishes multi-arch images, so
+  installs can use a prebuilt image instead of building on-device.
+
 ## 0.1.1
 
 - Fix: the Home Assistant tools (states, services, config check, reload, …) are

@@ -432,6 +432,11 @@ export class SessionRuntime {
     // tool-search tool: with search enabled the Home Assistant tools were
     // dropped from the prompt entirely, so Claude reported them unavailable.
     env.ENABLE_TOOL_SEARCH = '0';
+    // The model's subprocess never needs the Supervisor token: the Home
+    // Assistant tools run in this Node process (in-process MCP server), which
+    // holds the token. Removing it prevents a Bash command from reading it and
+    // calling the Supervisor API directly, bypassing the tool guards.
+    delete env.SUPERVISOR_TOKEN;
     return env;
   }
 

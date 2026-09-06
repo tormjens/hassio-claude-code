@@ -51,6 +51,8 @@ export interface HookDeps {
   store: SessionStore;
   log: Logger;
   configDir: string;
+  /** The add-on's private data dir (/data). Holds credentials, sessions, audit log. */
+  dataDir: string;
 }
 
 function deny(reason: string) {
@@ -96,12 +98,64 @@ export function touchesProtectedFile(configDir: string, toolName: string, input:
   return undefined;
 }
 
+/**
+ * The add-on's own /data directory holds the user's credentials (options.json,
+ * the cached OAuth token) plus the session store and audit log, and the
+ * container environment holds credential tokens. None of that is the model's
+ * business, so block any tool that would reach into /data or dump those tokens.
+ * This is defence in depth: SUPERVISOR_TOKEN is also stripped from the model's
+ * subprocess environment (see agent.ts), and credential names are matched here
+ * so a Bash `printenv`/`cat` cannot exfiltrate them.
+ */
+const CREDENTIAL_PATTERN =
+  /(SUPERVISOR_TOKEN|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|\.credentials\.json|options\.json)/i;
+
+function withinDir(dir: string, candidate: string): boolean {
+  const abs = path.isAbsolute(candidate) ? path.normalize(candidate) : path.normalize(path.join(dir, candidate));
+  const rel = path.relative(path.normalize(dir), abs);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/** Exported for tests: does this tool input reach the add-on's private data or credentials? */
+export function touchesAddonData(dataDir: string, toolName: string, input: unknown): string | undefined {
+  const obj = (input ?? {}) as Record<string, unknown>;
+  for (const key of ['file_path', 'path', 'notebook_path']) {
+    const v = obj[key];
+    if (typeof v === 'string' && withinDir(dataDir, v)) return v;
+  }
+  if (toolName === 'Bash' || toolName === 'Grep' || toolName === 'Glob') {
+    const normData = dataDir.replace(/\\/g, '/');
+    for (const raw of stringsOf(input)) {
+      const s = raw.replace(/\\/g, '/');
+      if (CREDENTIAL_PATTERN.test(s)) return raw;
+      if (s === normData || s.includes(`${normData}/`)) return raw;
+    }
+  }
+  return undefined;
+}
+
 export function createHooksFactory(deps: HookDeps): (ctx: SessionContext) => Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const { ha, git, audit, store, log, configDir } = deps;
+  const { ha, git, audit, store, log, configDir, dataDir } = deps;
 
   return (ctx: SessionContext) => {
     const secretsGuard: HookCallback = async (input) => {
       const pre = input as PreToolUseHookInput;
+      const dataHit = touchesAddonData(dataDir, pre.tool_name, pre.tool_input);
+      if (dataHit) {
+        audit.write({
+          sessionId: ctx.sessionId,
+          toolUseId: pre.tool_use_id,
+          tool: pre.tool_name,
+          args: pre.tool_input,
+          outcome: 'blocked',
+          detail: `add-on data/credentials: ${dataHit}`,
+        });
+        return deny(
+          `Access to ${dataHit} is blocked: this is the Claude for Home Assistant add-on's private data ` +
+            '(credentials, session store, audit log) and its access tokens. Work within the Home Assistant ' +
+            'configuration directory instead.',
+        );
+      }
       const hit = touchesProtectedFile(configDir, pre.tool_name, pre.tool_input);
       if (!hit) return {};
       audit.write({

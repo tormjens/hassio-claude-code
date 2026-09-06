@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { touchesProtectedFile, isProtectedPath } from '../src/hooks.ts';
+import { touchesProtectedFile, isProtectedPath, touchesAddonData } from '../src/hooks.ts';
 import { redact } from '../src/audit.ts';
 
 const CONFIG = '/config';
@@ -26,6 +26,26 @@ describe('secrets guard', () => {
     assert.ok(touchesProtectedFile(CONFIG, 'Grep', { pattern: 'password', path: '/config/secrets.yaml' }));
     assert.equal(touchesProtectedFile(CONFIG, 'Bash', { command: 'ls /config' }), undefined);
     assert.equal(touchesProtectedFile(CONFIG, 'Grep', { pattern: 'secret', path: '/config' }), undefined);
+  });
+});
+
+describe('add-on data / credential guard', () => {
+  const DATA = '/data';
+  test('blocks reads of the add-on data dir and credential files', () => {
+    assert.ok(touchesAddonData(DATA, 'Read', { file_path: '/data/options.json' }));
+    assert.ok(touchesAddonData(DATA, 'Read', { file_path: '/data/.credentials.json' }));
+    assert.ok(touchesAddonData(DATA, 'Bash', { command: 'cat /data/options.json' }));
+    assert.ok(touchesAddonData(DATA, 'Bash', { command: 'ls /data/claude' }));
+  });
+  test('blocks Bash commands that dump credential tokens', () => {
+    assert.ok(touchesAddonData(DATA, 'Bash', { command: 'printenv SUPERVISOR_TOKEN' }));
+    assert.ok(touchesAddonData(DATA, 'Bash', { command: 'echo $CLAUDE_CODE_OAUTH_TOKEN' }));
+    assert.ok(touchesAddonData(DATA, 'Bash', { command: 'env | grep ANTHROPIC_API_KEY' }));
+  });
+  test('allows normal work in the config dir', () => {
+    assert.equal(touchesAddonData(DATA, 'Read', { file_path: '/config/configuration.yaml' }), undefined);
+    assert.equal(touchesAddonData(DATA, 'Bash', { command: 'ls /config' }), undefined);
+    assert.equal(touchesAddonData(DATA, 'Grep', { pattern: 'light', path: '/config' }), undefined);
   });
 });
 

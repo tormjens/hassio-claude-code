@@ -102,7 +102,7 @@ const sessions = new SessionManager({
   audit,
   mcpServersFactory: () => ({ [HA_SERVER_NAME]: createHaTools({ ha, configDir: config.configDir }) }),
   readOnlyTools: READ_ONLY_TOOLS,
-  hooksFactory: createHooksFactory({ ha, git, audit, store, log, configDir: config.configDir }),
+  hooksFactory: createHooksFactory({ ha, git, audit, store, log, configDir: config.configDir, dataDir: config.dataDir }),
   systemPromptAppend: buildSystemPromptAppend(config, { haVersion, gitEnabled }),
   credentialEnv,
   onModels,
