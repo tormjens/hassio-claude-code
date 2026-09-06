@@ -1,0 +1,26 @@
+configuration:
+  anthropic_api_key:
+    name: Anthropic API key
+    description: >-
+      API key from console.anthropic.com. Usage is billed to your Anthropic
+      account. Leave empty only if you route requests through a gateway that
+      does its own authentication (see the Documentation tab).
+  model:
+    name: Model
+    description: >-
+      Optional. Claude model id or alias to use, for example claude-opus-5 or
+      claude-sonnet-5. Leave empty to use the Claude Code default.
+  anthropic_base_url:
+    name: API base URL
+    description: >-
+      Optional. Send requests to a custom Anthropic-compatible endpoint or
+      gateway instead of api.anthropic.com.
+  log_level:
+    name: Log level
+    description: Verbosity of the add-on log.
+  auto_approve_readonly_tools:
+    name: Auto-approve read-only Home Assistant tools
+    description: >-
+      When enabled, tools that only read from Home Assistant (states, services,
+      areas, logs, templates) run without a permission prompt. Writes always
+      follow the permission mode selected in the chat.

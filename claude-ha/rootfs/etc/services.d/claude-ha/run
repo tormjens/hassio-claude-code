@@ -1,0 +1,52 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Claude for Home Assistant
+# Starts the Node.js server that hosts the chat UI and the Agent SDK session.
+# ==============================================================================
+set -e
+
+bashio::log.info "Preparing Claude for Home Assistant..."
+
+# Persistent home for Claude Code state (sessions, settings) on /data.
+export HOME=/data/home
+export CLAUDE_CONFIG_DIR=/data/claude
+mkdir -p "${HOME}" "${CLAUDE_CONFIG_DIR}"
+
+# ---- add-on options -> environment -------------------------------------------
+if bashio::config.has_value 'anthropic_api_key'; then
+    export ANTHROPIC_API_KEY
+    ANTHROPIC_API_KEY=$(bashio::config 'anthropic_api_key')
+else
+    bashio::log.warning "No Anthropic API key configured. The UI will explain how to add one."
+fi
+
+if bashio::config.has_value 'anthropic_base_url'; then
+    export ANTHROPIC_BASE_URL
+    ANTHROPIC_BASE_URL=$(bashio::config 'anthropic_base_url')
+fi
+
+if bashio::config.has_value 'model'; then
+    export CLAUDE_HA_MODEL
+    CLAUDE_HA_MODEL=$(bashio::config 'model')
+fi
+
+export CLAUDE_HA_LOG_LEVEL
+CLAUDE_HA_LOG_LEVEL=$(bashio::config 'log_level' 'info')
+
+export CLAUDE_HA_AUTO_APPROVE_READONLY
+CLAUDE_HA_AUTO_APPROVE_READONLY=$(bashio::config 'auto_approve_readonly_tools' 'true')
+
+export CLAUDE_HA_CONFIG_DIR=/config
+export CLAUDE_HA_DATA_DIR=/data
+export CLAUDE_HA_PORT="${CLAUDE_HA_PORT:-8099}"
+
+# Identify this integration in the Agent SDK User-Agent.
+export CLAUDE_AGENT_SDK_CLIENT_APP="claude-ha/$(bashio::addon.version)"
+
+# Disable Claude Code's own telemetry-ish extras that make no sense in an add-on.
+export DISABLE_AUTOUPDATER=1
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
+bashio::log.info "Starting Claude for Home Assistant on port ${CLAUDE_HA_PORT}..."
+cd /opt/claude-ha
+exec node dist/index.js

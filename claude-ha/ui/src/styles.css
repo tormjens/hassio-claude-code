@@ -1,0 +1,17 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1c1c1c;
+  --muted: #6b6b6b;
+  --accent: #03a9f4;
+  font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111111;
+    --fg: #e1e1e1;
+    --muted: #9e9e9e;
+  }
+}
+html, body, #app { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); }

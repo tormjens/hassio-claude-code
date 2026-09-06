@@ -1,0 +1,7 @@
+node_modules/
+dist/
+claude-ha/server/public/
+*.log
+.DS_Store
+*.tgz
+.env
