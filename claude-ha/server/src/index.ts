@@ -95,13 +95,12 @@ function authStatus(): AuthStatus {
   return { method: config.authMethod, configured: credentialsConfigured(authConfig) };
 }
 
-const haTools = createHaTools({ ha, configDir: config.configDir });
 const sessions = new SessionManager({
   config,
   store,
   log,
   audit,
-  mcpServers: { [HA_SERVER_NAME]: haTools },
+  mcpServersFactory: () => ({ [HA_SERVER_NAME]: createHaTools({ ha, configDir: config.configDir }) }),
   readOnlyTools: READ_ONLY_TOOLS,
   hooksFactory: createHooksFactory({ ha, git, audit, store, log, configDir: config.configDir }),
   systemPromptAppend: buildSystemPromptAppend(config, { haVersion, gitEnabled }),

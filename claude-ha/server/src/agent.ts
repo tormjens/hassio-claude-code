@@ -59,7 +59,9 @@ export interface AgentDeps {
   store: SessionStore;
   log: Logger;
   audit: AuditLog;
-  mcpServers: Record<string, McpServerConfig>;
+  /** Factory for the per-session MCP servers. A fresh instance per query: an
+   *  SDK MCP server binds to a single query and cannot be shared across sessions. */
+  mcpServersFactory: () => Record<string, McpServerConfig>;
   /** Fully-qualified names (mcp__ha__ha_get_states) of read-only tools. */
   readOnlyTools: Set<string>;
   hooksFactory: HooksFactory;
@@ -426,6 +428,10 @@ export class SessionRuntime {
     // credential chain even when empty. See auth.ts.
     const env = applyCredentialEnv(process.env, this.deps.credentialEnv);
     env.CLAUDE_AGENT_SDK_CLIENT_APP ??= `claude-ha/${config.version}`;
+    // Load every tool directly instead of deferring MCP tools behind the
+    // tool-search tool: with search enabled the Home Assistant tools were
+    // dropped from the prompt entirely, so Claude reported them unavailable.
+    env.ENABLE_TOOL_SEARCH = '0';
     return env;
   }
 
@@ -442,7 +448,7 @@ export class SessionRuntime {
       permissionMode: UI_TO_SDK_MODE[this.session.permissionMode],
       canUseTool: this.canUseTool,
       includePartialMessages: true,
-      mcpServers: this.deps.mcpServers,
+      mcpServers: this.deps.mcpServersFactory(),
       strictMcpConfig: true,
       hooks: this.deps.hooksFactory(this.context()),
       resume: this.session.sdkSessionId,

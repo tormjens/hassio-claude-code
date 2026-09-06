@@ -103,6 +103,29 @@ locally with `docker build` in `claude-ha/` or let the Supervisor build it.
   which the model reads and continues from. That deny-message is the only
   host→model channel `canUseTool` offers for this tool. Verified end to end:
   no permission card, two-step flow, and the model acted on the selection.
+- **HA tools were invisible to the model — three compounding bugs (fixed).**
+  Symptom: Claude reported "the `ha` MCP server failed to connect / tools not
+  available" and calls returned "No such tool available: ha_get_states".
+  Causes and fixes:
+  1. **`z.record` crashed `tools/list`.** Two tool schemas used
+     `z.record(z.string(), z.unknown())` (service `data`, template `variables`).
+     Under zod v4 the Agent SDK's schema serialization throws
+     ("Cannot read properties of undefined (reading 'push')"), so the whole `ha`
+     server returned zero tools even though it reported `connected`. Replaced
+     with `z.object({}).catchall(z.unknown())`, which serialises to
+     `additionalProperties` and keeps arbitrary keys. This was the primary bug.
+  2. **Shared MCP instance across sessions.** The server was created once and
+     reused for every `query()`; an SDK MCP server binds to a single query, so
+     the 2nd+ session logged `ha:failed`. Now built per session via
+     `mcpServersFactory()`.
+  3. **Tool-search deferral + name mismatch.** With tool search on, MCP tools
+     are deferred behind the ToolSearch tool; and the system prompt referenced
+     the short names (`ha_get_states`) while the real ids are
+     `mcp__ha__ha_get_states`. Set `ENABLE_TOOL_SEARCH=0` on the subprocess so
+     every tool loads inline, kept `alwaysLoad: true` on the server, and rewrote
+     the prompt to use the `mcp__ha__` ids.
+  Verified: the in-process server lists all 11 tools, and Claude calls
+  `mcp__ha__*` directly (errors only locally where there is no Supervisor).
 - **Permission flow order** is hooks, deny rules, ask rules, permission mode,
   allow rules, then `canUseTool`. Tools auto-approved by the mode never reach
   `canUseTool`, which is why the secrets guard and the config-check guard are
