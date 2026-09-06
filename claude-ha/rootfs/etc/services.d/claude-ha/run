@@ -1,0 +1,68 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Claude for Home Assistant
+# Starts the Node.js server that hosts the chat UI and the Agent SDK session.
+# ==============================================================================
+set -e
+
+bashio::log.info "Preparing Claude for Home Assistant..."
+
+# Persistent home for Claude Code state (sessions, settings) on /data.
+export HOME=/data/home
+export CLAUDE_CONFIG_DIR=/data/claude
+mkdir -p "${HOME}" "${CLAUDE_CONFIG_DIR}"
+
+# ---- add-on options -> environment -------------------------------------------
+# Export an option as an environment variable only when it has a value: an
+# empty ANTHROPIC_API_KEY still outranks the OAuth token in the credential chain.
+export_option() {
+    local var="$1" key="$2"
+    if bashio::config.has_value "${key}"; then
+        export "${var}=$(bashio::config "${key}")"
+    fi
+}
+
+export CLAUDE_HA_AUTH_METHOD
+CLAUDE_HA_AUTH_METHOD=$(bashio::config 'auth_method' 'oauth')
+
+if [[ "${CLAUDE_HA_AUTH_METHOD}" == "api_key" ]]; then
+    export_option ANTHROPIC_API_KEY anthropic_api_key
+    # Never let a stale OAuth/bearer token shadow the API key.
+    unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN
+    if ! bashio::config.has_value 'anthropic_api_key'; then
+        bashio::log.warning "Authentication method is api_key but no API key is configured."
+    fi
+else
+    # Subscription OAuth token from `claude setup-token`.
+    export_option CLAUDE_CODE_OAUTH_TOKEN oauth_token
+    # ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN outrank the OAuth token even
+    # when empty, so remove them.
+    unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+    if ! bashio::config.has_value 'oauth_token'; then
+        bashio::log.warning "No OAuth token configured. Run 'claude setup-token' and paste the result into the add-on options."
+    fi
+fi
+
+export_option ANTHROPIC_BASE_URL anthropic_base_url
+export_option CLAUDE_HA_MODEL model
+
+export CLAUDE_HA_LOG_LEVEL
+CLAUDE_HA_LOG_LEVEL=$(bashio::config 'log_level' 'info')
+
+export CLAUDE_HA_AUTO_APPROVE_READONLY
+CLAUDE_HA_AUTO_APPROVE_READONLY=$(bashio::config 'auto_approve_readonly_tools' 'true')
+
+export CLAUDE_HA_CONFIG_DIR=/config
+export CLAUDE_HA_DATA_DIR=/data
+export CLAUDE_HA_PORT="${CLAUDE_HA_PORT:-8099}"
+
+# Identify this integration in the Agent SDK User-Agent.
+export CLAUDE_AGENT_SDK_CLIENT_APP="claude-ha/$(bashio::addon.version)"
+
+# Disable Claude Code's own telemetry-ish extras that make no sense in an add-on.
+export DISABLE_AUTOUPDATER=1
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
+bashio::log.info "Starting Claude for Home Assistant on port ${CLAUDE_HA_PORT}..."
+cd /opt/claude-ha
+exec node dist/index.js

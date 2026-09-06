@@ -1,0 +1,58 @@
+# Home Assistant add-on manifest.
+# Reference: https://developers.home-assistant.io/docs/apps/configuration
+name: Claude for Home Assistant
+version: 0.1.0
+slug: claude_ha
+description: Chat with Claude to read, edit and validate your Home Assistant configuration
+url: https://github.com/tormjens/hassio-claude-code
+arch:
+  - amd64
+  - aarch64
+# The image is built locally by the Supervisor until the GitHub Actions
+# workflow has published images. Uncomment once ghcr.io/tormjens/claude-ha
+# carries a tag matching `version`.
+# image: ghcr.io/tormjens/claude-ha
+# The HA base image ships s6-overlay v3, which must run as PID 1.
+init: false
+startup: application
+boot: auto
+homeassistant: "2025.1.0"
+# Web UI is served through Home Assistant ingress only, no host ports.
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:robot-outline
+panel_title: Claude
+panel_admin: true
+# Supervisor API: core config check, restart and logs need the homeassistant role.
+hassio_api: true
+hassio_role: homeassistant
+# Core REST and WebSocket API via http://supervisor/core/api
+homeassistant_api: true
+map:
+  # The Home Assistant configuration directory, mounted read-write at /config
+  # so Claude edits the real YAML files.
+  - type: homeassistant_config
+    read_only: false
+    path: /config
+  # Certificates, read-only, so Claude can inspect TLS setups.
+  - type: ssl
+    read_only: true
+backup_exclude:
+  - "home/.cache/**"
+  - "home/.npm/**"
+options:
+  auth_method: oauth
+  log_level: info
+  auto_approve_readonly_tools: true
+schema:
+  # Subscription OAuth token (default) or a legacy static API key.
+  auth_method: list(oauth|api_key)
+  # OAuth: token from `claude setup-token`, run on any machine with a
+  # Claude Pro/Max/Team/Enterprise subscription.
+  oauth_token: password?
+  # Legacy, only used when auth_method is api_key.
+  anthropic_api_key: password?
+  model: str?
+  anthropic_base_url: url?
+  log_level: list(debug|info|warning|error)
+  auto_approve_readonly_tools: bool
