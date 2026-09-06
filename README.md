@@ -5,6 +5,8 @@ sidebar. Ask Claude to read your entities, explain and write automations, check
 your YAML for errors, and safely edit your configuration — all from a native
 panel, powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk).
 
+![Claude for Home Assistant](docs/screenshot.png)
+
 > Claude runs against your real `/config` directory with the same file tools as
 > Claude Code, plus a set of Home Assistant tools. It asks before it changes
 > anything, refuses to read your secrets, and takes a git checkpoint before its
