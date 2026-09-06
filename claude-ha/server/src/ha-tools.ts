@@ -147,7 +147,7 @@ export function createHaTools({ ha, configDir }: HaToolsOptions): McpSdkServerCo
         })
         .optional()
         .describe('Entities, devices, areas, labels or floors to target'),
-      data: z.record(z.string(), z.unknown()).optional().describe('Service data fields'),
+      data: z.object({}).catchall(z.unknown()).optional().describe('Service data fields'),
       return_response: z.boolean().optional().describe('Ask the service for a response payload'),
     },
     async (args) => {
@@ -328,7 +328,7 @@ export function createHaTools({ ha, configDir }: HaToolsOptions): McpSdkServerCo
     'Render a Home Assistant Jinja2 template against the live state, for example "{{ states(\'sensor.temperature\') }}" or "{{ states.automation | selectattr(\'attributes.friendly_name\', \'search\', \'garage\') | map(attribute=\'entity_id\') | list }}". Great for testing template sensors before writing them to YAML.',
     {
       template: z.string().describe('Jinja2 template source'),
-      variables: z.record(z.string(), z.unknown()).optional().describe('Optional template variables'),
+      variables: z.object({}).catchall(z.unknown()).optional().describe('Optional template variables'),
     },
     async (args) => {
       try {
