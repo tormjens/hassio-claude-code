@@ -15,6 +15,7 @@ import {
   type HookCallbackMatcher,
   type HookEvent,
   type McpServerConfig,
+  type ModelInfo,
   type Options,
   type PermissionMode,
   type PermissionResult,
@@ -25,9 +26,12 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
 import type { AppConfig, Logger } from './config.js';
+import { applyCredentialEnv, type CredentialEnv } from './auth.js';
 import type { AuditLog } from './audit.js';
 import type { SessionStore, StoredSession } from './store.js';
 import type {
+  QuestionItem,
+  QuestionRequest,
   AssistantTextItem,
   PermissionDecision,
   PermissionModeUi,
@@ -60,6 +64,48 @@ export interface AgentDeps {
   readOnlyTools: Set<string>;
   hooksFactory: HooksFactory;
   systemPromptAppend: string;
+  /** Credential variables for the Claude Code subprocess (OAuth token or API key). */
+  credentialEnv: CredentialEnv;
+  /** Called when the SDK reports the available models (from the init message). */
+  onModels?: (models: ModelInfo[]) => void;
+}
+
+const ASK_USER_QUESTION = 'AskUserQuestion';
+function isAskUserQuestion(toolName: string): boolean {
+  return toolName === ASK_USER_QUESTION || toolName.endsWith(`__${ASK_USER_QUESTION}`);
+}
+
+/** Coerce the AskUserQuestion tool input into a clean question list. */
+function normalizeQuestions(input: Record<string, unknown>): QuestionItem[] {
+  const raw = (input as { questions?: unknown }).questions;
+  if (!Array.isArray(raw)) return [];
+  const out: QuestionItem[] = [];
+  for (const q of raw) {
+    if (!q || typeof q !== 'object') continue;
+    const question = String((q as { question?: unknown }).question ?? '');
+    const header = String((q as { header?: unknown }).header ?? '');
+    const multiSelect = Boolean((q as { multiSelect?: unknown }).multiSelect);
+    const opts = (q as { options?: unknown }).options;
+    const options = Array.isArray(opts)
+      ? opts
+          .filter((o): o is Record<string, unknown> => !!o && typeof o === 'object')
+          .map((o) => ({ label: String(o.label ?? ''), description: o.description ? String(o.description) : undefined }))
+          .filter((o) => o.label)
+      : [];
+    if (question && options.length) out.push({ header, question, multiSelect, options });
+  }
+  return out;
+}
+
+/** Turn the user's picks into a tool-result message the model can act on. */
+function formatAnswers(questions: QuestionItem[], answers: string[][]): string {
+  const lines = questions.map((q, i) => {
+    const picks = answers[i] ?? [];
+    const value = picks.length ? picks.join(', ') : '(no answer)';
+    return questions.length > 1 ? `- ${q.header || q.question}: ${value}` : value;
+  });
+  const body = lines.join('\n');
+  return questions.length > 1 ? `The user answered your questions:\n${body}` : `The user answered: ${body}`;
 }
 
 const UI_TO_SDK_MODE: Record<PermissionModeUi, PermissionMode> = {
@@ -107,6 +153,7 @@ interface PendingPermission {
 }
 
 export class SessionRuntime {
+  private modelsQueried = false;
   readonly id: string;
   status: SessionStatus = 'idle';
   private q: Query | undefined;
@@ -117,6 +164,10 @@ export class SessionRuntime {
   /** content block index -> transcript item id, for the current assistant message. */
   private blockItems = new Map<number, string>();
   private readonly toolItems = new Map<string, ToolUseItem>();
+  private readonly questionResolvers = new Map<
+    string,
+    { request: QuestionRequest; resolve: (r: PermissionResult) => void }
+  >();
   private consuming: Promise<void> | undefined;
 
   constructor(
@@ -150,6 +201,62 @@ export class SessionRuntime {
 
   pendingPermissions(): PermissionRequest[] {
     return [...this.pending.values()].map((p) => p.request);
+  }
+
+  pendingQuestions(): QuestionRequest[] {
+    return [...this.questionResolvers.values()].map((p) => p.request);
+  }
+
+  /**
+   * AskUserQuestion is not a permission: present the questions to the user and
+   * return their answer through the tool result. The SDK exposes AskUserQuestion
+   * via canUseTool, and the only host->model channel here is the permission
+   * result's `message`, so the answer is delivered as a (non-interrupting) deny
+   * message the model reads and acts on.
+   */
+  private askQuestion(
+    toolName: string,
+    input: Record<string, unknown>,
+    opts: { requestId?: string; toolUseID: string; signal: AbortSignal },
+  ): Promise<PermissionResult> {
+    const questions = normalizeQuestions(input);
+    // If we cannot parse questions, fall back to auto-allowing so we never hang.
+    if (!questions.length) return Promise.resolve({ behavior: 'allow', updatedInput: input });
+    const requestId = opts.requestId || randomUUID();
+    const request: QuestionRequest = { requestId, toolUseId: opts.toolUseID, questions, ts: Date.now() };
+    return new Promise<PermissionResult>((resolve) => {
+      this.questionResolvers.set(requestId, { request, resolve });
+      this.setStatus('waiting_permission');
+      this.emit({ type: 'question_request', sessionId: this.id, request });
+      opts.signal.addEventListener(
+        'abort',
+        () => {
+          if (this.questionResolvers.delete(requestId)) {
+            resolve({ behavior: 'deny', message: 'The question was cancelled.' });
+            this.emit({ type: 'question_resolved', sessionId: this.id, requestId });
+            this.refreshWaitingStatus();
+          }
+        },
+        { once: true },
+      );
+    });
+  }
+
+  resolveQuestion(requestId: string, answers: string[][]): boolean {
+    const p = this.questionResolvers.get(requestId);
+    if (!p) return false;
+    this.questionResolvers.delete(requestId);
+    const message = formatAnswers(p.request.questions, answers);
+    p.resolve({ behavior: 'deny', message });
+    this.emit({ type: 'question_resolved', sessionId: this.id, requestId });
+    this.refreshWaitingStatus();
+    return true;
+  }
+
+  private refreshWaitingStatus(): void {
+    if (this.pending.size === 0 && this.questionResolvers.size === 0 && this.status === 'waiting_permission') {
+      this.setStatus('running');
+    }
   }
 
   private setStatus(status: SessionStatus): void {
@@ -212,6 +319,11 @@ export class SessionRuntime {
       this.pending.delete(id);
       this.emit({ type: 'permission_resolved', sessionId: this.id, requestId: id });
     }
+    for (const [id, p] of this.questionResolvers) {
+      p.resolve({ behavior: 'deny', message: 'Interrupted by the user.', interrupt: true });
+      this.questionResolvers.delete(id);
+      this.emit({ type: 'question_resolved', sessionId: this.id, requestId: id });
+    }
     if (this.q && this.status !== 'idle') {
       try {
         await this.q.interrupt();
@@ -229,6 +341,18 @@ export class SessionRuntime {
         await this.q.setPermissionMode(UI_TO_SDK_MODE[mode]);
       } catch (err) {
         this.deps.log.warning(`setPermissionMode failed for ${this.id}`, err);
+      }
+    }
+  }
+
+  async setModel(model?: string): Promise<void> {
+    this.session.model = model || undefined;
+    this.emitSession();
+    if (this.q) {
+      try {
+        await this.q.setModel(model || undefined);
+      } catch (err) {
+        this.deps.log.warning(`setModel failed for ${this.id}`, err);
       }
     }
   }
@@ -274,6 +398,10 @@ export class SessionRuntime {
       p.resolve({ behavior: 'deny', message: 'Session closed.' });
       this.pending.delete(id);
     }
+    for (const [id, p] of this.questionResolvers) {
+      p.resolve({ behavior: 'deny', message: 'Session closed.' });
+      this.questionResolvers.delete(id);
+    }
     this.input?.close();
     this.abort?.abort();
     try {
@@ -293,9 +421,10 @@ export class SessionRuntime {
 
   private buildEnv(): Record<string, string | undefined> {
     const { config } = this.deps;
-    const env: Record<string, string | undefined> = { ...process.env };
-    if (config.anthropicApiKey) env.ANTHROPIC_API_KEY = config.anthropicApiKey;
-    if (config.anthropicBaseUrl) env.ANTHROPIC_BASE_URL = config.anthropicBaseUrl;
+    // Applies the selected auth method: sets CLAUDE_CODE_OAUTH_TOKEN (or the
+    // API key) and strips the variables that would outrank it in the CLI's
+    // credential chain even when empty. See auth.ts.
+    const env = applyCredentialEnv(process.env, this.deps.credentialEnv);
     env.CLAUDE_AGENT_SDK_CLIENT_APP ??= `claude-ha/${config.version}`;
     return env;
   }
@@ -309,7 +438,7 @@ export class SessionRuntime {
 
     const options: Options = {
       cwd: config.configDir,
-      model: config.model || undefined,
+      model: this.session.model || config.model || undefined,
       permissionMode: UI_TO_SDK_MODE[this.session.permissionMode],
       canUseTool: this.canUseTool,
       includePartialMessages: true,
@@ -371,6 +500,9 @@ export class SessionRuntime {
   // ---------------------------------------------------------------------------
 
   private readonly canUseTool: CanUseTool = async (toolName, input, opts) => {
+    if (isAskUserQuestion(toolName)) {
+      return this.askQuestion(toolName, input, opts);
+    }
     if (this.session.alwaysAllowedTools.includes(toolName)) {
       return { behavior: 'allow', updatedInput: input };
     }
@@ -431,6 +563,16 @@ export class SessionRuntime {
           );
           const failed = message.mcp_servers.filter((s) => s.status === 'failed');
           if (failed.length) this.note('warning', `MCP servers failed to start: ${failed.map((s) => s.name).join(', ')}`);
+          // The init message does not carry the model list; ask the SDK once.
+          if (this.deps.onModels && !this.modelsQueried) {
+            this.modelsQueried = true;
+            void this.q
+              ?.supportedModels()
+              .then((models) => {
+                if (models?.length) this.deps.onModels?.(models);
+              })
+              .catch((err) => this.deps.log.debug(`supportedModels failed: ${String(err)}`));
+          }
         } else if (message.subtype === 'compact_boundary') {
           this.note('info', 'Conversation context was compacted to stay within the model limit.');
         }
@@ -479,6 +621,7 @@ export class SessionRuntime {
             input: {},
             inputPartial: '',
             status: 'streaming',
+            hidden: isAskUserQuestion(block.name),
           };
           this.blockItems.set(index, item.id);
           this.toolItems.set(item.id, item);

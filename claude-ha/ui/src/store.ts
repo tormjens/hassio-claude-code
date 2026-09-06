@@ -5,12 +5,14 @@
  * ingress prefix (/api/hassio_ingress/<token>/) as well as in local dev.
  */
 import { reactive, computed } from 'vue';
+import { toast } from 'vue-sonner';
 import type {
   ClientMessage,
   GitStatus,
   PermissionDecision,
   PermissionModeUi,
   PermissionRequest,
+  QuestionRequest,
   ServerMessage,
   SessionStatus,
   SessionSummary,
@@ -24,6 +26,7 @@ interface SessionView {
   items: TranscriptItem[];
   status: SessionStatus;
   pending: PermissionRequest[];
+  questions: QuestionRequest[];
   loaded: boolean;
 }
 
@@ -64,7 +67,7 @@ function wsUrl(): string {
 }
 
 function view(id: string): SessionView {
-  return (state.views[id] ??= { items: [], status: 'idle', pending: [], loaded: false });
+  return (state.views[id] ??= { items: [], status: 'idle', pending: [], questions: [], loaded: false });
 }
 
 function findItem(v: SessionView, id: string): TranscriptItem | undefined {
@@ -76,6 +79,11 @@ export function pushError(message: string): void {
   const id = ++errorSeq;
   state.errors.push({ id, message, ts: Date.now() });
   setTimeout(() => dismissError(id), 8000);
+  try {
+    toast.error(message);
+  } catch {
+    // toast host not mounted yet
+  }
 }
 
 export function dismissError(id: number): void {
@@ -113,6 +121,7 @@ function handle(msg: ServerMessage): void {
       v.items = msg.items;
       v.status = msg.status;
       v.pending = msg.pending;
+      v.questions = msg.questions;
       v.loaded = true;
       if (pendingNewSession) {
         pendingNewSession = false;
@@ -161,8 +170,21 @@ function handle(msg: ServerMessage): void {
       v.pending = v.pending.filter((p) => p.requestId !== msg.requestId);
       break;
     }
+    case 'question_request': {
+      const v = view(msg.sessionId);
+      if (!v.questions.some((q) => q.requestId === msg.request.requestId)) v.questions.push(msg.request);
+      break;
+    }
+    case 'question_resolved': {
+      const v = view(msg.sessionId);
+      v.questions = v.questions.filter((q) => q.requestId !== msg.requestId);
+      break;
+    }
     case 'git':
       state.git = msg.git;
+      break;
+    case 'models':
+      if (state.settings) state.settings.models = msg.models;
       break;
     case 'error':
       pushError(msg.message);
@@ -246,8 +268,16 @@ export function setPermissionMode(mode: PermissionModeUi): void {
   if (state.currentId) send({ type: 'set_permission_mode', sessionId: state.currentId, mode });
 }
 
+export function setModel(model: string | undefined): void {
+  if (state.currentId) send({ type: 'set_model', sessionId: state.currentId, model });
+}
+
 export function respondPermission(requestId: string, decision: PermissionDecision): void {
   if (state.currentId) send({ type: 'permission_response', sessionId: state.currentId, requestId, decision });
+}
+
+export function answerQuestion(requestId: string, answers: string[][]): void {
+  if (state.currentId) send({ type: 'question_response', sessionId: state.currentId, requestId, answers });
 }
 
 export function deleteSession(id: string): void {
@@ -266,3 +296,4 @@ export function gitInit(): void {
 export function revertSession(id: string): void {
   send({ type: 'revert_session', sessionId: id });
 }
+

@@ -41,9 +41,16 @@ backup_exclude:
   - "home/.cache/**"
   - "home/.npm/**"
 options:
+  auth_method: oauth
   log_level: info
   auto_approve_readonly_tools: true
 schema:
+  # Subscription OAuth token (default) or a legacy static API key.
+  auth_method: list(oauth|api_key)
+  # OAuth: token from `claude setup-token`, run on any machine with a
+  # Claude Pro/Max/Team/Enterprise subscription.
+  oauth_token: password?
+  # Legacy, only used when auth_method is api_key.
   anthropic_api_key: password?
   model: str?
   anthropic_base_url: url?

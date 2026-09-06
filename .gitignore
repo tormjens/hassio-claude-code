@@ -5,3 +5,8 @@ claude-ha/server/public/
 .DS_Store
 *.tgz
 .env
+
+.dev/
+
+# JetBrains IDE
+.idea/

@@ -13,22 +13,38 @@ export CLAUDE_CONFIG_DIR=/data/claude
 mkdir -p "${HOME}" "${CLAUDE_CONFIG_DIR}"
 
 # ---- add-on options -> environment -------------------------------------------
-if bashio::config.has_value 'anthropic_api_key'; then
-    export ANTHROPIC_API_KEY
-    ANTHROPIC_API_KEY=$(bashio::config 'anthropic_api_key')
+# Export an option as an environment variable only when it has a value: an
+# empty ANTHROPIC_API_KEY still outranks the OAuth token in the credential chain.
+export_option() {
+    local var="$1" key="$2"
+    if bashio::config.has_value "${key}"; then
+        export "${var}=$(bashio::config "${key}")"
+    fi
+}
+
+export CLAUDE_HA_AUTH_METHOD
+CLAUDE_HA_AUTH_METHOD=$(bashio::config 'auth_method' 'oauth')
+
+if [[ "${CLAUDE_HA_AUTH_METHOD}" == "api_key" ]]; then
+    export_option ANTHROPIC_API_KEY anthropic_api_key
+    # Never let a stale OAuth/bearer token shadow the API key.
+    unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN
+    if ! bashio::config.has_value 'anthropic_api_key'; then
+        bashio::log.warning "Authentication method is api_key but no API key is configured."
+    fi
 else
-    bashio::log.warning "No Anthropic API key configured. The UI will explain how to add one."
+    # Subscription OAuth token from `claude setup-token`.
+    export_option CLAUDE_CODE_OAUTH_TOKEN oauth_token
+    # ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN outrank the OAuth token even
+    # when empty, so remove them.
+    unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+    if ! bashio::config.has_value 'oauth_token'; then
+        bashio::log.warning "No OAuth token configured. Run 'claude setup-token' and paste the result into the add-on options."
+    fi
 fi
 
-if bashio::config.has_value 'anthropic_base_url'; then
-    export ANTHROPIC_BASE_URL
-    ANTHROPIC_BASE_URL=$(bashio::config 'anthropic_base_url')
-fi
-
-if bashio::config.has_value 'model'; then
-    export CLAUDE_HA_MODEL
-    CLAUDE_HA_MODEL=$(bashio::config 'model')
-fi
+export_option ANTHROPIC_BASE_URL anthropic_base_url
+export_option CLAUDE_HA_MODEL model
 
 export CLAUDE_HA_LOG_LEVEL
 CLAUDE_HA_LOG_LEVEL=$(bashio::config 'log_level' 'info')

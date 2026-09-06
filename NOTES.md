@@ -54,7 +54,55 @@ locally with `docker build` in `claude-ha/` or let the Supervisor build it.
   declares `node >= 22`. The image uses Alpine 3.24's Node 24. The server
   itself targets Node 22+.
 - **`env` replaces the subprocess environment** instead of merging. The agent
-  spreads `process.env` and then sets `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`.
+  spreads `process.env`, then applies the credential env from `auth.ts`
+  (`buildCredentialEnv`), which both sets and *removes* variables.
+- **Authentication is a subscription OAuth token, not an API key.** The user
+  asked for "identity federation"; WIF was built (self-issued OIDC) then
+  dropped as the wrong fit for a self-hosted add-on with no cloud IdP. Final
+  choice: a long-lived OAuth token from `claude setup-token`, exported as
+  `CLAUDE_CODE_OAUTH_TOKEN`. The CLI credential chain is cloud provider,
+  `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `apiKeyHelper`,
+  `CLAUDE_CODE_OAUTH_TOKEN`, profiles, then `/login`; the two token/key
+  variables win even when empty, so `auth.ts` unsets them in oauth mode.
+  `auth_method: api_key` remains as a legacy fallback (unsets the OAuth and
+  bearer tokens instead). A full in-app "Log in with Claude" browser flow is a
+  possible later milestone but Anthropic restricts third-party claude.ai login
+  without approval. Auth status is exposed at `/api/health` and in the `hello`
+  settings; there is no server-side token probe (a real check would spend
+  tokens).
+- **Local development** uses `scripts/dev.sh` (repo root): it installs deps,
+  creates a throwaway `.dev/config` HA config and `.dev/data`, runs the server
+  with `tsx watch` on :8099 and the Vite dev server on :5173 (which proxies
+  `/api` and `/ws`), and loads a gitignored `.env` for `CLAUDE_CODE_OAUTH_TOKEN`
+  or `ANTHROPIC_API_KEY`. `--server-only`, `--ui-only`, `--install`.
+- **The UI uses shadcn-vue** (Reka UI + Tailwind v4), added with the
+  `shadcn-vue` CLI so components live in `claude-ha/ui/src/components/ui` and are
+  editable. Icons are `@lucide/vue`, toasts are `vue-sonner`, theme tokens are in
+  `src/index.css` (neutral base, primary hue set to HA's `#03a9f4`), dark mode
+  follows the OS scheme via a `.dark` class set in `main.ts`. Path alias `@` ->
+  `src` in `vite.config.ts` and `tsconfig.json`. Tailwind runs through
+  `@tailwindcss/vite`. `components.json` records the CLI config. The layout is
+  mobile-first: the sidebar is a persistent column from the `md` breakpoint and
+  an off-canvas drawer with a backdrop below it. Nuxt UI was used briefly then
+  removed at the user's request.
+- **Model selector.** Each session carries an optional `model` override
+  (`StoredSession.model`). The available models are learned from the SDK via
+  `query.supportedModels()` on the first init of a session (the init message
+  itself does not carry them), cached to `<dataDir>/models.json`, broadcast to
+  clients, and included in `settings`. The UI selector calls `set_model`, which
+  runs `query.setModel()` on the live session; unset means the add-on's
+  configured `model` option (or the SDK default). The SDK returns its own
+  `default` row, so the UI does not add a separate sentinel.
+- **AskUserQuestion is handled in `canUseTool`, not as a permission.** The tool
+  reaches `canUseTool`; the add-on intercepts it, hides the raw tool item
+  (`ToolUseItem.hidden`), and emits a `question_request` instead of a permission
+  prompt. The UI renders a step-by-step question card (one question at a time,
+  Back/Next, multi-select supported) from `currentView.questions`. On submit the
+  answers go back over `question_response`; the server resolves the tool via a
+  non-interrupting `{behavior:'deny', message}` whose text carries the answer,
+  which the model reads and continues from. That deny-message is the only
+  host→model channel `canUseTool` offers for this tool. Verified end to end:
+  no permission card, two-step flow, and the model acted on the selection.
 - **Permission flow order** is hooks, deny rules, ask rules, permission mode,
   allow rules, then `canUseTool`. Tools auto-approved by the mode never reach
   `canUseTool`, which is why the secrets guard and the config-check guard are

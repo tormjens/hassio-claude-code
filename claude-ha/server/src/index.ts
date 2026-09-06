@@ -4,6 +4,7 @@
  */
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { loadConfig, createLogger } from './config.js';
 import { createStaticHandler, ingressPath, isTrustedPeer, sendJson, sendText } from './http.js';
@@ -15,7 +16,9 @@ import { createHaTools, HA_SERVER_NAME, READ_ONLY_TOOLS } from './ha-tools.js';
 import { createHooksFactory } from './hooks.js';
 import { SessionManager } from './agent.js';
 import { buildSystemPromptAppend } from './system-prompt.js';
-import type { ClientMessage, ServerMessage, Settings } from './protocol.js';
+import { buildCredentialEnv, credentialsConfigured } from './auth.js';
+import type { AuthStatus, ClientMessage, ModelOption, ServerMessage, Settings } from './protocol.js';
+import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk';
 
 const config = loadConfig();
 const log = createLogger(config.logLevel);
@@ -47,6 +50,51 @@ if (ha.configured) {
   log.warning('SUPERVISOR_TOKEN is not set: Home Assistant tools will fail until the add-on runs under the Supervisor');
 }
 
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+const authConfig = {
+  method: config.authMethod,
+  oauthToken: config.oauthToken,
+  anthropicApiKey: config.anthropicApiKey,
+  anthropicBaseUrl: config.anthropicBaseUrl,
+};
+const credentialEnv = buildCredentialEnv(authConfig);
+
+// ---------------------------------------------------------------------------
+// Available models (learned from the SDK's session-init message, cached on disk
+// so the selector is populated immediately after a restart).
+// ---------------------------------------------------------------------------
+const modelsPath = path.join(config.dataDir, 'models.json');
+let availableModels: ModelOption[] = [];
+try {
+  availableModels = JSON.parse(fs.readFileSync(modelsPath, 'utf8')) as ModelOption[];
+} catch {
+  availableModels = [];
+}
+
+function onModels(models: ModelInfo[]): void {
+  const next: ModelOption[] = models.map((m) => ({
+    value: m.value,
+    label: m.displayName,
+    description: m.description,
+  }));
+  if (JSON.stringify(next) === JSON.stringify(availableModels)) return;
+  availableModels = next;
+  try {
+    fs.writeFileSync(modelsPath, JSON.stringify(next, null, 2));
+  } catch (err) {
+    log.debug(`could not persist models.json: ${String(err)}`);
+  }
+  log.info(`learned ${next.length} available models`);
+  broadcast({ type: 'models', models: next });
+}
+
+function authStatus(): AuthStatus {
+  return { method: config.authMethod, configured: credentialsConfigured(authConfig) };
+}
+
 const haTools = createHaTools({ ha, configDir: config.configDir });
 const sessions = new SessionManager({
   config,
@@ -57,16 +105,13 @@ const sessions = new SessionManager({
   readOnlyTools: READ_ONLY_TOOLS,
   hooksFactory: createHooksFactory({ ha, git, audit, store, log, configDir: config.configDir }),
   systemPromptAppend: buildSystemPromptAppend(config, { haVersion, gitEnabled }),
+  credentialEnv,
+  onModels,
 });
 
-/** An API key, a gateway that authenticates itself, or one of the SDK's alternative tokens. */
+/** True when the selected method has enough configuration to attempt a request. */
 function hasCredentials(): boolean {
-  return Boolean(
-    config.anthropicApiKey ||
-      config.anthropicBaseUrl ||
-      process.env.ANTHROPIC_AUTH_TOKEN ||
-      process.env.CLAUDE_CODE_OAUTH_TOKEN,
-  );
+  return credentialsConfigured(authConfig);
 }
 
 function settings(): Settings {
@@ -75,6 +120,9 @@ function settings(): Settings {
     baseUrl: config.anthropicBaseUrl,
     autoApproveReadOnly: config.autoApproveReadOnly,
     hasApiKey: hasCredentials(),
+    auth: authStatus(),
+    models: availableModels,
+    defaultModel: config.model,
     logLevel: config.logLevel,
     configDir: config.configDir,
     version: config.version,
@@ -101,6 +149,7 @@ const server = http.createServer(async (req, res) => {
         ingressPath: ingressPath(req),
         configDir: config.configDir,
         hasApiKey: hasCredentials(),
+        auth: authStatus(),
         supervisor: ha.configured,
       });
       return;
@@ -198,6 +247,7 @@ wss.on('connection', async (ws) => {
       items: stored?.items ?? [],
       status: rt.status,
       pending: rt.pendingPermissions(),
+      questions: rt.pendingQuestions(),
     });
   };
 
@@ -232,7 +282,10 @@ wss.on('connection', async (ws) => {
             send(ws, {
               type: 'error',
               sessionId: msg.sessionId,
-              message: 'No Anthropic API key configured. Add it in the add-on configuration and restart the add-on.',
+              message:
+                config.authMethod === 'oauth'
+                  ? 'Not signed in. Run `claude setup-token` and set the token in the add-on options (Authentication), then restart the add-on.'
+                  : 'No Anthropic API key configured. Add it in the add-on options and restart the add-on.',
             });
             break;
           }
@@ -248,6 +301,16 @@ wss.on('connection', async (ws) => {
         case 'set_permission_mode':
           await sessions.get(msg.sessionId)?.setPermissionMode(msg.mode);
           break;
+        case 'set_model':
+          await sessions.get(msg.sessionId)?.setModel(msg.model);
+          break;
+        case 'question_response': {
+          const rt = sessions.get(msg.sessionId);
+          if (!rt?.resolveQuestion(msg.requestId, msg.answers)) {
+            send(ws, { type: 'error', sessionId: msg.sessionId, message: 'That question is no longer waiting for an answer.' });
+          }
+          break;
+        }
         case 'permission_response': {
           const rt = sessions.get(msg.sessionId);
           if (!rt?.resolvePermission(msg.requestId, msg.decision)) {
@@ -314,7 +377,17 @@ wss.on('connection', async (ws) => {
 server.listen(config.port, '0.0.0.0', () => {
   log.info(`Claude for Home Assistant ${config.version} listening on :${config.port}`);
   log.info(`config dir: ${config.configDir}, data dir: ${config.dataDir}, ui: ${config.publicDir}`);
-  if (!config.anthropicApiKey) log.warning('ANTHROPIC_API_KEY is not set');
+  if (config.authMethod === 'oauth') {
+    log.info('auth: subscription OAuth token');
+    if (!config.oauthToken && !config.anthropicBaseUrl) {
+      log.warning(
+        'no OAuth token configured yet: run `claude setup-token` and paste the result into the add-on options',
+      );
+    }
+  } else {
+    log.info('auth: static API key (legacy)');
+    if (!config.anthropicApiKey && !config.anthropicBaseUrl) log.warning('ANTHROPIC_API_KEY is not set');
+  }
   if (config.model) log.info(`model: ${config.model}`);
   if (config.anthropicBaseUrl) log.info(`base url: ${config.anthropicBaseUrl}`);
 });

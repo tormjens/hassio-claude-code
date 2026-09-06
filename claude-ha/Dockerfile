@@ -17,6 +17,9 @@ WORKDIR /build/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY ui/ ./
+# The UI type-checks against the server's shared protocol types
+# (imported as ../../server/src/protocol), so make that file resolvable.
+COPY server/src/protocol.ts /build/server/src/protocol.ts
 RUN npm run build
 
 # ---------------------------------------------------------------------------

@@ -1,15 +1,23 @@
 configuration:
+  auth_method:
+    name: Authentication method
+    description: >-
+      "oauth" (recommended) uses a Claude subscription: run `claude setup-token`
+      on any computer signed in to your Claude Pro, Max, Team or Enterprise
+      account and paste the token below. "api_key" uses a static Anthropic API
+      key billed to your API account.
+  oauth_token:
+    name: Subscription OAuth token
+    description: >-
+      Token from `claude setup-token`. It opens a browser login against your
+      Claude subscription and prints a long-lived token (valid about a year).
+      Only used when the authentication method is "oauth".
   anthropic_api_key:
-    name: Anthropic API key
+    name: Anthropic API key (legacy)
     description: >-
-      API key from console.anthropic.com. Usage is billed to your Anthropic
-      account. Leave empty only if you route requests through a gateway that
-      does its own authentication (see the Documentation tab).
-  model:
-    name: Model
-    description: >-
-      Optional. Claude model id or alias to use, for example claude-opus-5 or
-      claude-sonnet-5. Leave empty to use the Claude Code default.
+      Only used when the authentication method is "api_key". API key from the
+      Claude Console. Usage is billed to your Anthropic account. Leave empty if
+      you route requests through a gateway that does its own authentication.
   anthropic_base_url:
     name: API base URL
     description: >-

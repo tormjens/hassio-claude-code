@@ -8,6 +8,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { AuthMethod } from './auth.js';
+export type { AuthMethod };
+
 export interface AppConfig {
   port: number;
   /** Directory the agent operates in. /config on Home Assistant OS. */
@@ -16,6 +19,14 @@ export interface AppConfig {
   dataDir: string;
   /** Directory the built Vue app is served from. */
   publicDir: string;
+  /**
+   * How the Claude Code subprocess authenticates. `oauth` uses a subscription
+   * OAuth token (default); `api_key` is the legacy static key.
+   */
+  authMethod: AuthMethod;
+  /** Subscription OAuth token from `claude setup-token`. */
+  oauthToken: string;
+  /** Only used when authMethod is `api_key`. */
   anthropicApiKey: string;
   anthropicBaseUrl: string;
   model: string;
@@ -53,12 +64,26 @@ export function loadConfig(): AppConfig {
     ? logLevelRaw
     : 'info') as AppConfig['logLevel'];
 
+  const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN ?? '';
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? '';
+  const authMethodRaw = (process.env.CLAUDE_HA_AUTH_METHOD ?? '').toLowerCase();
+  // OAuth is the default. Without an explicit choice, an API key alone
+  // (typical for local development) still selects the legacy path.
+  const authMethod: AuthMethod =
+    authMethodRaw === 'api_key' || authMethodRaw === 'oauth'
+      ? authMethodRaw
+      : !oauthToken && anthropicApiKey
+        ? 'api_key'
+        : 'oauth';
+
   return {
     port: Number(process.env.CLAUDE_HA_PORT ?? 8099),
+    authMethod,
+    oauthToken,
     configDir,
     dataDir,
     publicDir: process.env.CLAUDE_HA_PUBLIC_DIR ?? path.resolve(here, '..', 'public'),
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    anthropicApiKey,
     anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL ?? '',
     model: process.env.CLAUDE_HA_MODEL ?? '',
     logLevel,
