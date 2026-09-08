@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Show file changes as a red/green diff. Edit, Write and MultiEdit now render a
+  GitHub-style diff (with +/- line counts) instead of a raw JSON tool card.
+
 ## 0.1.3
 
 - Show Claude's reasoning: a summary of the model's thinking now streams into a

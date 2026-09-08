@@ -7,6 +7,8 @@ import {
   CheckCheck,
   ChevronLeft,
   ChevronRight,
+  FilePenLine,
+  FilePlus,
   CircleAlert,
   CircleCheck,
   CircleHelp,
@@ -44,7 +46,7 @@ import {
   setPermissionMode,
   state,
 } from './store';
-import type { PermissionModeUi, QuestionRequest } from '../../server/src/protocol';
+import type { PermissionModeUi, QuestionRequest, TranscriptItem } from '../../server/src/protocol';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +69,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { Toaster } from '@/components/ui/sonner';
+import { FILE_EDIT_TOOLS, fileEditView, type FileEditView } from '@/lib/diff';
 
 const DEFAULT_MODEL = '__default__';
 
@@ -150,6 +153,16 @@ function fmtInput(input: unknown, partial?: string): string {
 }
 
 const toolLabel = (name: string) => name.replace('mcp__ha__', '').replace('mcp__homeassistant__', '');
+const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p;
+const editViewCache = new Map<string, FileEditView | null>();
+function editView(item: TranscriptItem): FileEditView | null {
+  if (item.kind !== 'tool_use') return null;
+  const settled = item.status !== 'streaming';
+  if (settled && editViewCache.has(item.id)) return editViewCache.get(item.id) ?? null;
+  const view = fileEditView(item.name, item.input);
+  if (settled) editViewCache.set(item.id, view);
+  return view;
+}
 
 // ---- AskUserQuestion (rendered as a step-by-step card) ----
 const stepOf = (req: QuestionRequest) => askStep[req.requestId] ?? 0;
@@ -366,6 +379,63 @@ connect();
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <pre class="max-h-64 overflow-auto whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground">{{ item.text }}</pre>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <!-- File edit diff (Edit / Write / MultiEdit) -->
+              <Collapsible
+                v-else-if="item.kind === 'tool_use' && !item.hidden && FILE_EDIT_TOOLS.has(item.name)"
+                :default-open="true"
+                class="animate-message-in overflow-hidden rounded-xl border bg-muted/40"
+              >
+                <CollapsibleTrigger class="group flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent/50">
+                  <ChevronRight class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+                  <component :is="item.name === 'Write' ? FilePlus : FilePenLine" class="size-3.5 shrink-0 text-primary" />
+                  <code class="truncate font-medium" :title="editView(item)?.file">{{
+                    editView(item) ? baseName(editView(item)!.file) : toolLabel(item.name)
+                  }}</code>
+                  <span v-if="editView(item)" class="ml-auto shrink-0 font-mono text-[11px]">
+                    <span v-if="editView(item)!.adds" class="text-success">+{{ editView(item)!.adds }}</span>
+                    <span v-if="editView(item)!.dels" class="ml-1 text-destructive">-{{ editView(item)!.dels }}</span>
+                    <span
+                      v-if="item.status === 'error' || item.status === 'denied'"
+                      class="ml-1.5 rounded bg-destructive/15 px-1 text-destructive"
+                    >{{ item.status }}</span>
+                  </span>
+                  <Badge v-else variant="secondary" class="ml-auto shrink-0">{{ item.status }}</Badge>
+                </CollapsibleTrigger>
+                <CollapsibleContent class="space-y-2 px-3 pb-3 text-xs">
+                  <template v-if="editView(item)">
+                    <div
+                      v-for="(blk, bi) in editView(item)!.blocks"
+                      :key="bi"
+                      class="overflow-hidden rounded-lg border bg-background"
+                    >
+                      <p v-if="blk.title" class="border-b px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                        {{ blk.title }}
+                      </p>
+                      <div class="max-h-80 overflow-auto py-1 font-mono text-[12px] leading-relaxed">
+                        <div
+                          v-for="(ln, li) in blk.lines"
+                          :key="li"
+                          class="flex whitespace-pre px-2"
+                          :class="ln.type === 'add' ? 'bg-success/10' : ln.type === 'del' ? 'bg-destructive/10' : ''"
+                        >
+                          <span
+                            class="mr-2 shrink-0 select-none"
+                            :class="ln.type === 'add' ? 'text-success' : ln.type === 'del' ? 'text-destructive' : 'text-muted-foreground/40'"
+                          >{{ ln.type === 'add' ? '+' : ln.type === 'del' ? '-' : ' ' }}</span>
+                          <span :class="ln.type === 'ctx' ? 'text-muted-foreground' : ''">{{ ln.text }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p v-if="item.status === 'denied'" class="text-muted-foreground">Change was not applied.</p>
+                    <pre
+                      v-if="item.isError && item.result"
+                      class="max-h-40 overflow-auto rounded-lg bg-destructive/10 p-2.5 text-destructive"
+                    >{{ item.result }}</pre>
+                  </template>
+                  <pre v-else class="max-h-64 overflow-auto rounded-lg bg-background p-2.5">{{ fmtInput(item.input, item.inputPartial) }}</pre>
                 </CollapsibleContent>
               </Collapsible>
 

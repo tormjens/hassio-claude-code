@@ -297,3 +297,4 @@ export function revertSession(id: string): void {
   send({ type: 'revert_session', sessionId: id });
 }
 
+
