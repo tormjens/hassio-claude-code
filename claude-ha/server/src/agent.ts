@@ -453,6 +453,10 @@ export class SessionRuntime {
       permissionMode: UI_TO_SDK_MODE[this.session.permissionMode],
       canUseTool: this.canUseTool,
       includePartialMessages: true,
+      // Stream a readable summary of Claude's reasoning into the UI's collapsed
+      // "Thinking" section. Current models omit it by default. Only the summary
+      // is exposed, never the raw chain of thought.
+      thinking: { type: 'adaptive', display: 'summarized' },
       mcpServers: this.deps.mcpServersFactory(),
       strictMcpConfig: true,
       hooks: this.deps.hooksFactory(this.context()),

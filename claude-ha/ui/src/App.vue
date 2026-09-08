@@ -358,7 +358,7 @@ connect();
                 </div>
               </div>
 
-              <Collapsible v-else-if="item.kind === 'thinking'" class="animate-message-in overflow-hidden rounded-xl border bg-muted/40">
+              <Collapsible v-else-if="item.kind === 'thinking'" :default-open="item.partial" class="animate-message-in overflow-hidden rounded-xl border bg-muted/40">
                 <CollapsibleTrigger class="group flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50">
                   <ChevronRight class="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
                   <Lightbulb class="size-3.5" />

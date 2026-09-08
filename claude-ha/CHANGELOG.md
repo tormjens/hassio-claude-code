@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Show Claude's reasoning: a summary of the model's thinking now streams into a
+  "Thinking" panel above each answer (auto-expands while it thinks, then stays
+  collapsible). Only the summary is shown, never the raw chain of thought, and
+  the model still decides when deeper reasoning is warranted.
+
 ## 0.1.2
 
 - Security: the model's subprocess no longer receives the Supervisor token, and
