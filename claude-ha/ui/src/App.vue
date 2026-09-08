@@ -426,8 +426,7 @@ connect();
                           <span
                             class="mr-2 shrink-0 select-none"
                             :class="ln.type === 'add' ? 'text-success' : ln.type === 'del' ? 'text-destructive' : 'text-muted-foreground/40'"
-                          >{{ ln.type === 'add' ? '+' : ln.type === 'del' ? '-' : ' ' }}</span>
-                          <span :class="ln.type === 'ctx' ? 'text-muted-foreground' : ''">{{ ln.text }}</span>
+                          >{{ ln.type === 'add' ? '+' : ln.type === 'del' ? '-' : ' ' }}</span><span class="hljs-line" v-html="ln.html || ' '" />
                         </div>
                       </div>
                     </div>

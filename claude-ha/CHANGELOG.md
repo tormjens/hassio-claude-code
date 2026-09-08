@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+- Syntax-highlight YAML (and JSON/INI/etc.) in the file-edit diff view, on top of
+  the red/green diff.
+- Fix the aarch64 image build: runtime dependencies are now cross-installed on
+  the build host instead of under QEMU emulation, which was crashing (SIGILL).
+
 ## 0.1.5
 
 - Render Claude's replies as Markdown, with syntax-highlighted code blocks.

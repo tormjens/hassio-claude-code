@@ -34,6 +34,21 @@ COPY server/ ./
 RUN npm run build
 
 # ---------------------------------------------------------------------------
+# Runtime dependencies. Installed on the build host (never emulated) and
+# cross-fetched for the target arch with npm's --os/--cpu/--libc flags, so the
+# matching @anthropic-ai/claude-agent-sdk-linux-<arch>-musl prebuilt is pulled
+# without running an emulated node (which SIGILLs under QEMU for aarch64).
+# ---------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM node:22-alpine AS deps
+ARG BUILD_ARCH
+WORKDIR /deps
+COPY server/package.json server/package-lock.json ./
+RUN NPM_CPU="$([ "$BUILD_ARCH" = "aarch64" ] && echo arm64 || echo x64)" \
+    && npm ci --no-audit --no-fund --omit=dev --ignore-scripts \
+        --os=linux --libc=musl --cpu="$NPM_CPU" \
+    && npm cache clean --force
+
+# ---------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------
 FROM ${BUILD_FROM}
@@ -61,11 +76,10 @@ ENV \
 
 WORKDIR /opt/claude-ha
 
-# Install runtime dependencies for the *target* platform. npm picks the
-# matching @anthropic-ai/claude-agent-sdk-linux-<arch>-musl binary here.
-COPY server/package.json server/package-lock.json ./
-RUN npm ci --no-audit --no-fund --omit=dev \
-    && npm cache clean --force
+# Runtime deps come from the native `deps` stage (see above); package.json is
+# needed for its "type": "module".
+COPY server/package.json ./
+COPY --from=deps /deps/node_modules ./node_modules
 
 COPY --from=server-build /build/server/dist ./dist
 COPY --from=ui-build /build/ui/dist ./public
