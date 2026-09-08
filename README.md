@@ -1,6 +1,6 @@
 # Claude for Home Assistant
 
-A Home Assistant add-on that puts a **Claude chat** right in your Home Assistant
+A Home Assistant app that puts a **Claude chat** right in your Home Assistant
 sidebar. Ask Claude to read your entities, explain and write automations, check
 your YAML for errors, and safely edit your configuration — all from a native
 panel, powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk).
@@ -33,13 +33,13 @@ panel, powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-s
 - **Safety built in** — a secrets guard, a mandatory config check before
   reload/restart, a git checkpoint before the first edit, and a redacted audit
   log.
-- **Persistent, resumable chats** — sessions survive add-on restarts.
+- **Persistent, resumable chats** — sessions survive app restarts.
 
 ---
 
 ## Requirements
 
-- Home Assistant OS or Supervised (the add-on runs under the Supervisor).
+- Home Assistant OS or Supervised (the app runs under the Supervisor).
 - A **Claude subscription** (Pro, Max, Team, or Enterprise) for the default
   sign-in method, or an Anthropic **API key** if you prefer usage-based billing.
 
@@ -47,7 +47,7 @@ panel, powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-s
 
 ## Installation
 
-1. In Home Assistant, go to **Settings → Add-ons → Add-on Store**.
+1. In Home Assistant, go to **Settings → Apps → App Store**.
 2. Open the **⋮** menu (top right) → **Repositories**, and add:
 
    ```
@@ -55,14 +55,14 @@ panel, powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-s
    ```
 
 3. Find **Claude for Home Assistant** in the store and click **Install**.
-4. Configure authentication (below), then **Start** the add-on and open it from
+4. Configure authentication (below), then **Start** the app and open it from
    the sidebar.
 
 ---
 
 ## Authentication
 
-The add-on supports two methods, chosen with the `auth_method` option.
+The app supports two methods, chosen with the `auth_method` option.
 
 ### Subscription (recommended)
 
@@ -77,8 +77,8 @@ usage-billed API key is stored.
    ```
 
 2. Approve the browser login. It prints a token that is valid for about a year.
-3. In the add-on **Configuration** tab, set `auth_method: oauth` and paste the
-   token into `oauth_token`, then restart the add-on.
+3. In the app **Configuration** tab, set `auth_method: oauth` and paste the
+   token into `oauth_token`, then restart the app.
 
 ### API key (alternative)
 
@@ -124,7 +124,7 @@ Read-only Home Assistant lookups run without prompting (toggle with
 ### What Claude can do
 
 Alongside the standard Claude Code file tools (read, edit, search, run
-commands), the add-on exposes Home Assistant tools:
+commands), the app exposes Home Assistant tools:
 
 | Tool                   | Purpose                                              |
 | ---------------------- | ---------------------------------------------------- |
@@ -148,7 +148,7 @@ commands), the add-on exposes Home Assistant tools:
   Claude can see secret *names* but never their values.
 - **Config check before reload/restart** — `ha_reload` and `ha_restart_core`
   run a configuration check first and refuse on failure.
-- **Git checkpoint** — before its first edit in a session, the add-on commits a
+- **Git checkpoint** — before its first edit in a session, the app commits a
   checkpoint of `/config`, so you can revert from the UI.
 - **Audit log** — every tool call is recorded (with secrets redacted) under
   `/data`.
@@ -157,7 +157,7 @@ commands), the add-on exposes Home Assistant tools:
 
 ## Local development
 
-You do not need Home Assistant to work on the add-on. From the repo root:
+You do not need Home Assistant to work on the app. From the repo root:
 
 ```bash
 scripts/dev.sh
@@ -235,10 +235,10 @@ See [NOTES.md](NOTES.md) for the design decisions and open questions.
 ## Troubleshooting
 
 - **"Not signed in" banner or chat errors** — no credential is configured.
-  Follow [Authentication](#authentication) and restart the add-on.
-- **Home Assistant tools fail** — they only work when the add-on runs under the
+  Follow [Authentication](#authentication) and restart the app.
+- **Home Assistant tools fail** — they only work when the app runs under the
   Supervisor (not in bare local development without a `SUPERVISOR_TOKEN`).
-- **Nothing happens on send** — check the add-on log; set `log_level: debug` for
+- **Nothing happens on send** — check the app log; set `log_level: debug` for
   detail.
 
 ---
