@@ -69,6 +69,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { Toaster } from '@/components/ui/sonner';
+import Markdown from '@/components/Markdown.vue';
 import { FILE_EDIT_TOOLS, fileEditView, type FileEditView } from '@/lib/diff';
 
 const DEFAULT_MODEL = '__default__';
@@ -366,8 +367,9 @@ connect();
                 <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                   <Sparkles class="size-4" />
                 </div>
-                <div class="min-w-0 flex-1 whitespace-pre-wrap break-words pt-0.5 leading-relaxed">
-                  {{ item.text }}<span v-if="item.partial" class="ml-0.5 inline-block h-4 w-[2px] -translate-y-0.5 animate-pulse bg-foreground align-middle" />
+                <div class="min-w-0 flex-1 pt-0.5">
+                  <Markdown :text="item.text" />
+                  <span v-if="item.partial" class="ml-0.5 inline-block h-4 w-[2px] -translate-y-0.5 animate-pulse bg-foreground align-middle" />
                 </div>
               </div>
 

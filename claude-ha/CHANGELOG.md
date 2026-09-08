@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Render Claude's replies as Markdown, with syntax-highlighted code blocks.
+- Add an add-on icon and logo.
+- Add in-app documentation (Documentation tab).
+- Install prebuilt multi-arch images from ghcr.io instead of building on-device.
+
 ## 0.1.4
 
 - Show file changes as a red/green diff. Edit, Write and MultiEdit now render a
