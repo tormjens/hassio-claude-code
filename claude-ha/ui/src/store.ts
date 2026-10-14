@@ -19,6 +19,7 @@ import type {
   SessionSummary,
   Settings,
   TranscriptItem,
+  UsageLimits,
 } from '../../server/src/protocol';
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
@@ -36,6 +37,8 @@ interface State {
   sessions: SessionSummary[];
   settings: Settings | null;
   git: GitStatus | null;
+  /** Plan usage limits; null until known or for API-key logins. */
+  usage: UsageLimits | null;
   currentId: string | null;
   views: Record<string, SessionView>;
   errors: Array<{ id: number; message: string; ts: number }>;
@@ -47,6 +50,7 @@ export const state = reactive<State>({
   sessions: [],
   settings: null,
   git: null,
+  usage: null,
   currentId: null,
   views: {},
   errors: [],
@@ -98,6 +102,7 @@ function handle(msg: ServerMessage): void {
       state.sessions = msg.sessions;
       state.settings = msg.settings;
       state.git = msg.git;
+      state.usage = msg.usage ?? null;
       if (state.currentId && msg.sessions.some((s) => s.id === state.currentId)) {
         send({ type: 'subscribe', sessionId: state.currentId });
       } else if (!state.currentId && msg.sessions.length && !pendingNewSession) {
@@ -183,6 +188,9 @@ function handle(msg: ServerMessage): void {
     }
     case 'git':
       state.git = msg.git;
+      break;
+    case 'usage':
+      state.usage = msg.usage;
       break;
     case 'models':
       if (state.settings) state.settings.models = msg.models;
@@ -322,5 +330,6 @@ export function revertSession(id: string): void {
   send({ type: 'revert_session', sessionId: id });
 }
 
-
-
+export function refreshUsage(): void {
+  send({ type: 'refresh_usage' });
+}

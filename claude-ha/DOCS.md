@@ -60,6 +60,12 @@ WebP, up to 5 MB each) and PDFs (up to 20 MB), and reads text files such as
 YAML, logs and JSON (up to 1 MB). Up to 10 files per message. Uploads are
 stored under the add-on's `/data/uploads` and deleted together with the chat.
 
+**Usage limits** (subscription only): the sidebar shows how much of your
+plan's current 5-hour session and weekly limits you have used, and when each
+resets, the same numbers as Claude Code's `/usage`. They update after each
+reply; the refresh button fetches them on demand. A warning appears when you
+are close to a limit. Hidden when you use an API key.
+
 ## Configuration options
 
 | Option                        | Default  | Description                                                                                     |

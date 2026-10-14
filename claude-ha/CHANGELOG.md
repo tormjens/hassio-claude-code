@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.10
+
+- See your Claude plan's usage limits in the sidebar: how much of the current
+  5-hour session and the weekly limits (overall and per model) is used, and
+  when each resets, like Claude Code's `/usage`. The numbers update after each
+  reply and on the refresh button, survive a restart, and turn amber then red
+  as a limit gets close; a banner warns when you are about to hit one.
+  Subscription logins only; hidden for API keys.
+
 ## 0.1.9
 
 - Send messages while Claude is working. The message box used to lock until

@@ -180,9 +180,43 @@ export interface Settings {
   version: string;
 }
 
+/** One plan rate-limit window, e.g. the 5-hour session or the weekly limit. */
+export interface UsageWindow {
+  key: string;
+  label: string;
+  /** Percentage of the window used, 0-100; null when the server did not say. */
+  utilization: number | null;
+  /** ISO 8601 time the window resets. */
+  resetsAt: string | null;
+}
+
+/** Claude subscription usage limits, as shown by Claude Code's /usage. */
+export interface UsageLimits {
+  /** False for API keys and other logins without plan limits. */
+  available: boolean;
+  /** 'pro', 'max', 'team', 'enterprise', or null. */
+  subscriptionType: string | null;
+  windows: UsageWindow[];
+  /** Pay-as-you-go spend beyond the plan, when the plan has it. */
+  extraUsage?: {
+    enabled: boolean;
+    utilization: number | null;
+    /** Minor units of `currency` (cents for USD). */
+    usedCredits: number | null;
+    monthlyLimit: number | null;
+    currency: string | null;
+  };
+  /** Latest throttling state reported alongside an API response. */
+  status?: 'allowed' | 'allowed_warning' | 'rejected';
+  /** Which window the status refers to. */
+  limitType?: string;
+  /** When these numbers were fetched (epoch ms). */
+  updatedAt: number;
+}
+
 /** Server to client messages. */
 export type ServerMessage =
-  | { type: 'hello'; sessions: SessionSummary[]; settings: Settings; git: GitStatus }
+  | { type: 'hello'; sessions: SessionSummary[]; settings: Settings; git: GitStatus; usage: UsageLimits | null }
   | { type: 'sessions'; sessions: SessionSummary[] }
   | { type: 'session'; session: SessionSummary }
   | {
@@ -205,6 +239,7 @@ export type ServerMessage =
   | { type: 'question_resolved'; sessionId: string; requestId: string }
   | { type: 'git'; git: GitStatus }
   | { type: 'models'; models: ModelOption[] }
+  | { type: 'usage'; usage: UsageLimits | null }
   | { type: 'error'; sessionId?: string; message: string };
 
 export type PermissionDecision = 'allow' | 'deny' | 'allow_always';
@@ -224,4 +259,5 @@ export type ClientMessage =
   | { type: 'rename_session'; sessionId: string; title: string }
   | { type: 'git_init' }
   | { type: 'revert_session'; sessionId: string }
-  | { type: 'list_sessions' };
+  | { type: 'list_sessions' }
+  | { type: 'refresh_usage' };

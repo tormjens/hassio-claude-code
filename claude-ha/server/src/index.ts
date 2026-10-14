@@ -18,6 +18,7 @@ import { createHooksFactory } from './hooks.js';
 import { SessionManager } from './agent.js';
 import { buildSystemPromptAppend } from './system-prompt.js';
 import { buildCredentialEnv, credentialsConfigured } from './auth.js';
+import { UsageTracker } from './usage.js';
 import type { AuthStatus, ClientMessage, ModelOption, ServerMessage, Settings } from './protocol.js';
 import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk';
 
@@ -101,6 +102,27 @@ function authStatus(): AuthStatus {
   return { method: config.authMethod, configured: credentialsConfigured(authConfig) };
 }
 
+// ---------------------------------------------------------------------------
+// Plan usage limits (subscription logins only; see usage.ts).
+// ---------------------------------------------------------------------------
+const usage = new UsageTracker({
+  file: path.join(config.dataDir, 'usage.json'),
+  log,
+  onChange: (u) => broadcast({ type: 'usage', usage: u }),
+});
+
+let usageRefresh: Promise<void> | undefined;
+/** Fetch fresh usage, starting a short-lived Claude process if no session is running. */
+function refreshUsage(): Promise<void> {
+  if (config.authMethod !== 'oauth' || !hasCredentials()) return Promise.resolve();
+  usageRefresh ??= sessions
+    .withControlQuery((q) => usage.refresh(q, true))
+    .finally(() => {
+      usageRefresh = undefined;
+    });
+  return usageRefresh;
+}
+
 const sessions = new SessionManager({
   config,
   store,
@@ -112,6 +134,12 @@ const sessions = new SessionManager({
   systemPromptAppend: buildSystemPromptAppend(config, { haVersion, gitEnabled }),
   credentialEnv,
   onModels,
+  onUsageSignal: (q, info) => {
+    if (config.authMethod !== 'oauth') return;
+    if (info) usage.noteRateLimit(info);
+    // A warning or rejection means the numbers just moved; refresh right away.
+    void usage.refresh(q, Boolean(info && info.status !== 'allowed'));
+  },
 });
 
 /** True when the selected method has enough configuration to attempt a request. */
@@ -283,7 +311,13 @@ async function gitStatus() {
 wss.on('connection', async (ws) => {
   const subscriptions = new Map<string, () => void>();
 
-  send(ws, { type: 'hello', sessions: store.list(), settings: settings(), git: await gitStatus() });
+  send(ws, {
+    type: 'hello',
+    sessions: store.list(),
+    settings: settings(),
+    git: await gitStatus(),
+    usage: config.authMethod === 'oauth' ? usage.current : null,
+  });
 
   const subscribe = (sessionId: string) => {
     if (subscriptions.has(sessionId)) return;
@@ -318,6 +352,9 @@ wss.on('connection', async (ws) => {
     }
     try {
       switch (msg.type) {
+        case 'refresh_usage':
+          await refreshUsage();
+          break;
         case 'list_sessions':
           send(ws, { type: 'sessions', sessions: store.list() });
           break;
@@ -456,6 +493,7 @@ server.listen(config.port, '0.0.0.0', () => {
   }
   if (config.model) log.info(`model: ${config.model}`);
   if (config.anthropicBaseUrl) log.info(`base url: ${config.anthropicBaseUrl}`);
+  refreshUsage().catch((err) => log.debug(`initial usage fetch failed: ${String(err)}`));
 });
 
 let shuttingDown = false;
