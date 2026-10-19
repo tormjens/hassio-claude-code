@@ -22,6 +22,7 @@ import {
   type PermissionUpdate,
   type Query,
   type SDKMessage,
+  type SDKRateLimitInfo,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
@@ -72,6 +73,27 @@ export interface AgentDeps {
   credentialEnv: CredentialEnv;
   /** Called when the SDK reports the available models (from the init message). */
   onModels?: (models: ModelInfo[]) => void;
+  /** Called after each turn, and on a rate-limit event, so plan usage can be refreshed. */
+  onUsageSignal?: (q: Query, info?: SDKRateLimitInfo) => void;
+}
+
+/** Environment for the Claude Code subprocess. */
+function buildSdkEnv(config: AppConfig, credentialEnv: CredentialEnv): Record<string, string | undefined> {
+  // Applies the selected auth method: sets CLAUDE_CODE_OAUTH_TOKEN (or the
+  // API key) and strips the variables that would outrank it in the CLI's
+  // credential chain even when empty. See auth.ts.
+  const env = applyCredentialEnv(process.env, credentialEnv);
+  env.CLAUDE_AGENT_SDK_CLIENT_APP ??= `claude-ha/${config.version}`;
+  // Load every tool directly instead of deferring MCP tools behind the
+  // tool-search tool: with search enabled the Home Assistant tools were
+  // dropped from the prompt entirely, so Claude reported them unavailable.
+  env.ENABLE_TOOL_SEARCH = '0';
+  // The model's subprocess never needs the Supervisor token: the Home
+  // Assistant tools run in this Node process (in-process MCP server), which
+  // holds the token. Removing it prevents a Bash command from reading it and
+  // calling the Supervisor API directly, bypassing the tool guards.
+  delete env.SUPERVISOR_TOKEN;
+  return env;
 }
 
 const ASK_USER_QUESTION = 'AskUserQuestion';
@@ -462,22 +484,12 @@ export class SessionRuntime {
   // ---------------------------------------------------------------------------
 
   private buildEnv(): Record<string, string | undefined> {
-    const { config } = this.deps;
-    // Applies the selected auth method: sets CLAUDE_CODE_OAUTH_TOKEN (or the
-    // API key) and strips the variables that would outrank it in the CLI's
-    // credential chain even when empty. See auth.ts.
-    const env = applyCredentialEnv(process.env, this.deps.credentialEnv);
-    env.CLAUDE_AGENT_SDK_CLIENT_APP ??= `claude-ha/${config.version}`;
-    // Load every tool directly instead of deferring MCP tools behind the
-    // tool-search tool: with search enabled the Home Assistant tools were
-    // dropped from the prompt entirely, so Claude reported them unavailable.
-    env.ENABLE_TOOL_SEARCH = '0';
-    // The model's subprocess never needs the Supervisor token: the Home
-    // Assistant tools run in this Node process (in-process MCP server), which
-    // holds the token. Removing it prevents a Bash command from reading it and
-    // calling the Supervisor API directly, bypassing the tool guards.
-    delete env.SUPERVISOR_TOKEN;
-    return env;
+    return buildSdkEnv(this.deps.config, this.deps.credentialEnv);
+  }
+
+  /** The live SDK query, if this session's Claude process is running. */
+  get liveQuery(): Query | undefined {
+    return this.q;
   }
 
   private ensureQuery(): void {
@@ -651,6 +663,10 @@ export class SessionRuntime {
         break;
       case 'result':
         this.handleResult(message);
+        if (this.q) this.deps.onUsageSignal?.(this.q);
+        break;
+      case 'rate_limit_event':
+        if (this.q) this.deps.onUsageSignal?.(this.q, message.rate_limit_info);
         break;
       default:
         break;
@@ -902,6 +918,55 @@ export class SessionManager {
       } catch (err) {
         this.deps.log.debug(`could not delete SDK transcript ${sdkSessionId}: ${String(err)}`);
       }
+    }
+  }
+
+  /**
+   * Run `fn` against a Claude process for control requests that need no
+   * conversation (plan usage). Borrows a running session's process when there
+   * is one; otherwise starts a short-lived one that never sends a prompt, so
+   * it makes no model request.
+   */
+  async withControlQuery<T>(fn: (q: Query) => Promise<T>): Promise<T> {
+    for (const rt of this.runtimes.values()) {
+      const live = rt.liveQuery;
+      if (live) return fn(live);
+    }
+    const { config, credentialEnv, log } = this.deps;
+    const input = new AsyncQueue<SDKUserMessage>();
+    const abort = new AbortController();
+    const q = query({
+      prompt: input,
+      options: {
+        cwd: config.configDir,
+        settingSources: [],
+        strictMcpConfig: true,
+        env: buildSdkEnv(config, credentialEnv),
+        abortController: abort,
+        stderr: (data) => log.debug(`[claude control] ${data.trimEnd()}`),
+      },
+    });
+    // Drain the output so the process is never blocked on a full pipe.
+    const drained = (async () => {
+      try {
+        for await (const _ of q) {
+          // nothing to do
+        }
+      } catch {
+        // closed below
+      }
+    })();
+    try {
+      return await fn(q);
+    } finally {
+      input.close();
+      try {
+        q.close();
+      } catch {
+        // ignore
+      }
+      abort.abort();
+      await drained;
     }
   }
 

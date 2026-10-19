@@ -76,6 +76,7 @@ import {
 } from '@/components/ui/select';
 import { Toaster } from '@/components/ui/sonner';
 import Markdown from '@/components/Markdown.vue';
+import UsageMeter from '@/components/UsageMeter.vue';
 import { FILE_EDIT_TOOLS, fileEditView, type FileEditView } from '@/lib/diff';
 
 const DEFAULT_MODEL = '__default__';
@@ -389,6 +390,7 @@ connect();
       </div>
 
       <div class="border-t p-3">
+        <UsageMeter />
         <button
           class="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-accent"
           @click="setupOpen = true"
