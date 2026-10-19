@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.11
+
+- Fix the usage limits refresh button doing nothing. It asked the Agent SDK's
+  usage endpoint, which `claude setup-token` tokens are not allowed to read
+  (they only have the inference scope), and which took 30 seconds to say so.
+  Refresh now sends a one-token request and reads the usage from the
+  response's rate-limit headers, like Claude Code's own quota check. If that
+  fails, the error is shown instead of nothing happening.
+- Error messages appear as proper toasts again; their stylesheet was not
+  loaded, so they rendered as unstyled text.
+
 ## 0.1.10
 
 - See your Claude plan's usage limits in the sidebar: how much of the current

@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import App from './App.vue';
+import 'vue-sonner/style.css';
 import './index.css';
 
 // shadcn-vue themes via a `.dark` class. The add-on runs in an iframe and

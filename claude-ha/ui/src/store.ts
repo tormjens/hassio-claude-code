@@ -39,6 +39,8 @@ interface State {
   git: GitStatus | null;
   /** Plan usage limits; null until known or for API-key logins. */
   usage: UsageLimits | null;
+  /** Bumped on every usage message, even one that changes nothing. */
+  usageSeq: number;
   currentId: string | null;
   views: Record<string, SessionView>;
   errors: Array<{ id: number; message: string; ts: number }>;
@@ -51,6 +53,7 @@ export const state = reactive<State>({
   settings: null,
   git: null,
   usage: null,
+  usageSeq: 0,
   currentId: null,
   views: {},
   errors: [],
@@ -191,6 +194,7 @@ function handle(msg: ServerMessage): void {
       break;
     case 'usage':
       state.usage = msg.usage;
+      state.usageSeq++;
       break;
     case 'models':
       if (state.settings) state.settings.models = msg.models;

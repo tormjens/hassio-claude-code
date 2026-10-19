@@ -1,24 +1,22 @@
 /**
- * Plan usage limits (the data behind Claude Code's `/usage` screen).
+ * Plan usage limits: how much of the Claude subscription's 5-hour session and
+ * weekly limits is used, and when each resets.
  *
- * The Agent SDK exposes the claude.ai plan's rate-limit windows through an
- * experimental control request on a live `Query`. This module turns that reply
- * into the compact `UsageLimits` shape the UI renders, keeps the latest copy on
- * disk so the sidebar is populated straight after a restart, and throttles
- * refreshes so a busy session does not hit the usage endpoint after every turn.
+ * The numbers come from the `anthropic-ratelimit-unified-*` headers on model
+ * responses. The CLI forwards them as `rate_limit_event`s during a chat, which
+ * costs nothing extra; the refresh button sends a one-token request and reads
+ * the same headers. (The SDK's experimental get_usage call is not used: it
+ * needs the user:profile scope, which `claude setup-token` tokens do not have,
+ * and it took 30 seconds to say so.)
  *
- * Only subscription (OAuth) logins have plan limits. For an API key the SDK
- * answers `rate_limits_available: false` and the UI hides the meter.
+ * The latest snapshot is kept on disk so the sidebar is populated straight
+ * after a restart. API keys and gateways get no such headers, so the UI hides
+ * the meter for them.
  */
 import fs from 'node:fs';
-import type { Query, SDKControlGetUsageResponse, SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from './config.js';
-import type { UsageLimits, UsageWindow } from './protocol.js';
-
-/** Anything that can answer the SDK's get_usage control request. */
-export type UsageSource = Pick<Query, 'usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET'>;
-
-type Window = { utilization: number | null; resets_at: string | null } | null | undefined;
+import type { UsageLimits } from './protocol.js';
 
 const NAMED_WINDOWS: Array<{ key: string; label: string }> = [
   { key: 'five_hour', label: 'Current session' },
@@ -32,47 +30,6 @@ const NAMED_WINDOWS: Array<{ key: string; label: string }> = [
 function clampPercent(n: number | null | undefined): number | null {
   if (typeof n !== 'number' || !Number.isFinite(n)) return null;
   return Math.min(100, Math.max(0, n));
-}
-
-/** Translate the SDK's get_usage reply into the wire shape. */
-export function normalizeUsage(resp: SDKControlGetUsageResponse, now = Date.now()): UsageLimits {
-  const limits = resp.rate_limits;
-  const windows: UsageWindow[] = [];
-  if (limits) {
-    const named = limits as unknown as Record<string, Window>;
-    for (const { key, label } of NAMED_WINDOWS) {
-      const w = named[key];
-      if (!w) continue;
-      windows.push({ key, label, utilization: clampPercent(w.utilization), resetsAt: w.resets_at ?? null });
-    }
-    for (const m of limits.model_scoped ?? []) {
-      const label = `Weekly · ${m.display_name}`;
-      // The per-model rows may repeat a named window (Opus, Sonnet); keep one.
-      if (windows.some((w) => w.label === label)) continue;
-      windows.push({
-        key: `model:${m.display_name}`,
-        label,
-        utilization: clampPercent(m.utilization),
-        resetsAt: m.resets_at ?? null,
-      });
-    }
-  }
-  const extra = limits?.extra_usage;
-  return {
-    available: Boolean(resp.rate_limits_available && limits),
-    subscriptionType: resp.subscription_type ?? null,
-    windows,
-    extraUsage: extra
-      ? {
-          enabled: extra.is_enabled,
-          utilization: clampPercent(extra.utilization),
-          usedCredits: extra.used_credits,
-          monthlyLimit: extra.monthly_limit,
-          currency: extra.currency ?? null,
-        }
-      : undefined,
-    updatedAt: now,
-  };
 }
 
 /**
@@ -103,6 +60,83 @@ export function applyRateLimitInfo(usage: UsageLimits | null, info: SDKRateLimit
   return next;
 }
 
+const HEADER_WINDOWS = [
+  { prefix: '5h', key: 'five_hour' },
+  { prefix: '7d', key: 'seven_day' },
+] as const;
+
+/**
+ * Read the plan's rate-limit windows from the `anthropic-ratelimit-unified-*`
+ * headers of a Messages API response, as rate-limit infos (fractions, epoch
+ * seconds). Empty when the response carried none (API keys, gateways).
+ */
+export function parseRateLimitHeaders(headers: Headers): SDKRateLimitInfo[] {
+  const status = headers.get('anthropic-ratelimit-unified-status');
+  const claim = headers.get('anthropic-ratelimit-unified-representative-claim');
+  const infos: SDKRateLimitInfo[] = [];
+  for (const { prefix, key } of HEADER_WINDOWS) {
+    const util = Number.parseFloat(headers.get(`anthropic-ratelimit-unified-${prefix}-utilization`) ?? '');
+    const reset = Number.parseFloat(headers.get(`anthropic-ratelimit-unified-${prefix}-reset`) ?? '');
+    if (!Number.isFinite(util) && !Number.isFinite(reset)) continue;
+    infos.push({
+      status: 'allowed',
+      rateLimitType: key,
+      ...(Number.isFinite(util) && { utilization: util }),
+      ...(Number.isFinite(reset) && { resetsAt: reset }),
+    });
+  }
+  // The overall status describes the representative (currently limiting)
+  // window; apply it last so it is the one the snapshot keeps.
+  if (status === 'allowed' || status === 'allowed_warning' || status === 'rejected') {
+    const i = infos.findIndex((x) => x.rateLimitType === claim);
+    const target = i >= 0 ? infos.splice(i, 1)[0] : infos.pop();
+    if (target) infos.push({ ...target, status });
+  }
+  return infos;
+}
+
+export interface ProbeOptions {
+  /** API base URL; defaults to https://api.anthropic.com. */
+  baseUrl?: string;
+  /** Subscription OAuth token (`claude setup-token`). */
+  oauthToken: string;
+  /** Models to try, cheapest first, until one answers with rate-limit headers. */
+  models?: string[];
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Learn the plan's usage from response headers by sending the smallest
+ * possible request (one output token), like Claude Code's own quota check.
+ * Used when the token cannot read the usage endpoint: `claude setup-token`
+ * tokens only carry the user:inference scope.
+ */
+export async function probeRateLimitHeaders(opts: ProbeOptions): Promise<SDKRateLimitInfo[]> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const url = `${(opts.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '')}/v1/messages`;
+  let lastError = '';
+  for (const model of opts.models ?? ['claude-haiku-5-5', 'claude-haiku-4-5']) {
+    const res = await doFetch(url, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${opts.oauthToken}`,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'oauth-2025-04-20',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'quota' }] }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    // A 429 still carries the headers, and is exactly when they matter.
+    const infos = parseRateLimitHeaders(res.headers);
+    await res.body?.cancel().catch(() => undefined);
+    if (infos.length) return infos;
+    if (res.status === 401 || res.status === 403) throw new Error(`the token was rejected (HTTP ${res.status})`);
+    lastError = `HTTP ${res.status}`;
+  }
+  throw new Error(`no usage information in the response (${lastError})`);
+}
+
 function windowOrder(key: string): number {
   const i = NAMED_WINDOWS.findIndex((n) => n.key === key);
   return i < 0 ? NAMED_WINDOWS.length : i;
@@ -114,18 +148,12 @@ export interface UsageTrackerOptions {
   log: Logger;
   /** Called whenever the snapshot changes. */
   onChange: (usage: UsageLimits | null) => void;
-  /** Minimum time between automatic refreshes. */
-  minIntervalMs?: number;
 }
 
 export class UsageTracker {
   current: UsageLimits | null = null;
-  private lastFetch = 0;
-  private inflight: Promise<void> | undefined;
-  private readonly minIntervalMs: number;
 
   constructor(private readonly opts: UsageTrackerOptions) {
-    this.minIntervalMs = opts.minIntervalMs ?? 60_000;
     try {
       this.current = JSON.parse(fs.readFileSync(opts.file, 'utf8')) as UsageLimits;
     } catch {
@@ -133,40 +161,19 @@ export class UsageTracker {
     }
   }
 
-  /**
-   * Ask `source` for fresh numbers. Automatic refreshes (after a turn) are
-   * throttled; `force` (the refresh button, a rate-limit event) is not.
-   */
-  refresh(source: UsageSource, force = false): Promise<void> {
-    if (this.inflight) return this.inflight;
-    if (!force && Date.now() - this.lastFetch < this.minIntervalMs) return Promise.resolve();
-    this.lastFetch = Date.now();
-    this.inflight = source
-      .usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true })
-      .then((resp) => {
-        const next = normalizeUsage(resp);
-        // A token without the profile scope cannot read the usage endpoint;
-        // keep what the rate-limit events taught us instead of blanking it.
-        if (!next.available && this.current?.windows.length) {
-          this.opts.onChange(this.current);
-          return;
-        }
-        // Keep the live throttling status from the last rate-limit event.
-        if (this.current?.status) {
-          next.status = this.current.status;
-          next.limitType = this.current.limitType;
-        }
-        this.set(next);
-      })
-      .catch((err) => this.opts.log.debug(`usage request failed: ${String(err)}`))
-      .finally(() => {
-        this.inflight = undefined;
-      });
-    return this.inflight;
-  }
-
   noteRateLimit(info: SDKRateLimitInfo): void {
     this.set(applyRateLimitInfo(this.current, info));
+  }
+
+  /** Apply several infos at once (from response headers) with one update. */
+  noteRateLimits(infos: SDKRateLimitInfo[]): void {
+    if (!infos.length) return;
+    this.set(infos.reduce<UsageLimits | null>((u, info) => applyRateLimitInfo(u, info), this.current) as UsageLimits);
+  }
+
+  /** True when there is something to show. */
+  get hasWindows(): boolean {
+    return Boolean(this.current?.available && this.current.windows.length);
   }
 
   private set(next: UsageLimits): void {
