@@ -18,7 +18,7 @@ import { createHooksFactory } from './hooks.js';
 import { SessionManager } from './agent.js';
 import { buildSystemPromptAppend } from './system-prompt.js';
 import { buildCredentialEnv, credentialsConfigured } from './auth.js';
-import { UsageTracker } from './usage.js';
+import { probeRateLimitHeaders, UsageTracker } from './usage.js';
 import type { AuthStatus, ClientMessage, ModelOption, ServerMessage, Settings } from './protocol.js';
 import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk';
 
@@ -112,14 +112,25 @@ const usage = new UsageTracker({
 });
 
 let usageRefresh: Promise<void> | undefined;
-/** Fetch fresh usage, starting a short-lived Claude process if no session is running. */
-function refreshUsage(): Promise<void> {
+/**
+ * Fetch fresh usage with a one-token request (see usage.ts). `if_empty` only
+ * does so when there is nothing to show yet, so a restart does not spend
+ * quota needlessly. Rejects with a message for the user on failure.
+ */
+function refreshUsage(when: 'always' | 'if_empty' = 'always'): Promise<void> {
   if (config.authMethod !== 'oauth' || !hasCredentials()) return Promise.resolve();
-  usageRefresh ??= sessions
-    .withControlQuery((q) => usage.refresh(q, true))
-    .finally(() => {
-      usageRefresh = undefined;
-    });
+  if (when === 'if_empty' && usage.hasWindows) return Promise.resolve();
+  usageRefresh ??= (async () => {
+    if (!config.oauthToken) throw new Error('Usage limits are not available for this login.');
+    try {
+      usage.noteRateLimits(await probeRateLimitHeaders({ baseUrl: config.anthropicBaseUrl, oauthToken: config.oauthToken }));
+    } catch (err) {
+      log.warning(`could not fetch usage limits: ${(err as Error).message}`);
+      throw new Error(`Could not fetch usage limits: ${(err as Error).message}`);
+    }
+  })().finally(() => {
+    usageRefresh = undefined;
+  });
   return usageRefresh;
 }
 
@@ -134,11 +145,8 @@ const sessions = new SessionManager({
   systemPromptAppend: buildSystemPromptAppend(config, { haVersion, gitEnabled }),
   credentialEnv,
   onModels,
-  onUsageSignal: (q, info) => {
-    if (config.authMethod !== 'oauth') return;
-    if (info) usage.noteRateLimit(info);
-    // A warning or rejection means the numbers just moved; refresh right away.
-    void usage.refresh(q, Boolean(info && info.status !== 'allowed'));
+  onRateLimit: (info) => {
+    if (config.authMethod === 'oauth') usage.noteRateLimit(info);
   },
 });
 
@@ -353,7 +361,13 @@ wss.on('connection', async (ws) => {
     try {
       switch (msg.type) {
         case 'refresh_usage':
-          await refreshUsage();
+          try {
+            await refreshUsage();
+          } finally {
+            // Always answer, so the refresh button stops spinning even when
+            // nothing changed or the fetch failed.
+            send(ws, { type: 'usage', usage: usage.current });
+          }
           break;
         case 'list_sessions':
           send(ws, { type: 'sessions', sessions: store.list() });
@@ -493,7 +507,7 @@ server.listen(config.port, '0.0.0.0', () => {
   }
   if (config.model) log.info(`model: ${config.model}`);
   if (config.anthropicBaseUrl) log.info(`base url: ${config.anthropicBaseUrl}`);
-  refreshUsage().catch((err) => log.debug(`initial usage fetch failed: ${String(err)}`));
+  refreshUsage('if_empty').catch((err) => log.debug(`initial usage fetch failed: ${String(err)}`));
 });
 
 let shuttingDown = false;

@@ -62,9 +62,10 @@ stored under the add-on's `/data/uploads` and deleted together with the chat.
 
 **Usage limits** (subscription only): the sidebar shows how much of your
 plan's current 5-hour session and weekly limits you have used, and when each
-resets, the same numbers as Claude Code's `/usage`. They update after each
-reply; the refresh button fetches them on demand. A warning appears when you
-are close to a limit. Hidden when you use an API key.
+resets, the same numbers as Claude Code's `/usage`. They update with every
+reply at no extra cost. The refresh button fetches them on demand by sending a
+one-token request, which counts (negligibly) toward your usage. A warning
+appears when you are close to a limit. Hidden when you use an API key.
 
 ## Configuration options
 

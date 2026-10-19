@@ -73,8 +73,8 @@ export interface AgentDeps {
   credentialEnv: CredentialEnv;
   /** Called when the SDK reports the available models (from the init message). */
   onModels?: (models: ModelInfo[]) => void;
-  /** Called after each turn, and on a rate-limit event, so plan usage can be refreshed. */
-  onUsageSignal?: (q: Query, info?: SDKRateLimitInfo) => void;
+  /** Called with the plan's rate-limit state the CLI reads from each model response. */
+  onRateLimit?: (info: SDKRateLimitInfo) => void;
 }
 
 /** Environment for the Claude Code subprocess. */
@@ -487,11 +487,6 @@ export class SessionRuntime {
     return buildSdkEnv(this.deps.config, this.deps.credentialEnv);
   }
 
-  /** The live SDK query, if this session's Claude process is running. */
-  get liveQuery(): Query | undefined {
-    return this.q;
-  }
-
   private ensureQuery(): void {
     if (this.q) return;
     const { config, log } = this.deps;
@@ -663,10 +658,9 @@ export class SessionRuntime {
         break;
       case 'result':
         this.handleResult(message);
-        if (this.q) this.deps.onUsageSignal?.(this.q);
         break;
       case 'rate_limit_event':
-        if (this.q) this.deps.onUsageSignal?.(this.q, message.rate_limit_info);
+        this.deps.onRateLimit?.(message.rate_limit_info);
         break;
       default:
         break;
@@ -918,55 +912,6 @@ export class SessionManager {
       } catch (err) {
         this.deps.log.debug(`could not delete SDK transcript ${sdkSessionId}: ${String(err)}`);
       }
-    }
-  }
-
-  /**
-   * Run `fn` against a Claude process for control requests that need no
-   * conversation (plan usage). Borrows a running session's process when there
-   * is one; otherwise starts a short-lived one that never sends a prompt, so
-   * it makes no model request.
-   */
-  async withControlQuery<T>(fn: (q: Query) => Promise<T>): Promise<T> {
-    for (const rt of this.runtimes.values()) {
-      const live = rt.liveQuery;
-      if (live) return fn(live);
-    }
-    const { config, credentialEnv, log } = this.deps;
-    const input = new AsyncQueue<SDKUserMessage>();
-    const abort = new AbortController();
-    const q = query({
-      prompt: input,
-      options: {
-        cwd: config.configDir,
-        settingSources: [],
-        strictMcpConfig: true,
-        env: buildSdkEnv(config, credentialEnv),
-        abortController: abort,
-        stderr: (data) => log.debug(`[claude control] ${data.trimEnd()}`),
-      },
-    });
-    // Drain the output so the process is never blocked on a full pipe.
-    const drained = (async () => {
-      try {
-        for await (const _ of q) {
-          // nothing to do
-        }
-      } catch {
-        // closed below
-      }
-    })();
-    try {
-      return await fn(q);
-    } finally {
-      input.close();
-      try {
-        q.close();
-      } catch {
-        // ignore
-      }
-      abort.abort();
-      await drained;
     }
   }
 

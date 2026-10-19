@@ -14,7 +14,7 @@ onBeforeUnmount(() => clearInterval(timer));
 
 const refreshing = ref(false);
 watch(
-  () => state.usage,
+  () => state.usageSeq,
   () => (refreshing.value = false),
 );
 
@@ -72,8 +72,9 @@ const updatedText = computed(() => {
 function refresh(): void {
   refreshing.value = true;
   refreshUsage();
-  // The server answers with a `usage` message; stop spinning regardless.
-  setTimeout(() => (refreshing.value = false), 15_000);
+  // The server always answers with a `usage` message; this is a backstop
+  // for a dropped connection.
+  setTimeout(() => (refreshing.value = false), 60_000);
 }
 </script>
 
@@ -119,9 +120,10 @@ function refresh(): void {
         <span>Extra usage</span>
         <span class="tabular-nums text-muted-foreground">{{ extra }}</span>
       </p>
+      <p class="text-[11px] text-muted-foreground">{{ refreshing ? 'Updating…' : updatedText }}</p>
     </template>
     <p v-else class="text-xs text-muted-foreground">
-      Shown after Claude's next reply, or press refresh.
+      {{ refreshing ? 'Fetching usage…' : "Shown after Claude's next reply, or press refresh." }}
     </p>
   </div>
 </template>
