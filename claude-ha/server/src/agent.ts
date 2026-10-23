@@ -510,6 +510,10 @@ export class SessionRuntime {
       resume: this.session.sdkSessionId,
       systemPrompt: { type: 'preset', preset: 'claude_code', append: this.deps.systemPromptAppend },
       settingSources: ['project'],
+      // Plan mode defaults to $CLAUDE_CONFIG_DIR/plans, which lives in /data where
+      // the add-on's guard blocks every tool. Keep plans in the config dir instead
+      // (relative to cwd).
+      settings: { plansDirectory: '.claude/plans' },
       env: this.buildEnv(),
       abortController: this.abort,
       stderr: (data) => log.debug(`[claude ${this.id.slice(0, 8)}] ${data.trimEnd()}`),

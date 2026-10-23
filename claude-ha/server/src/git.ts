@@ -34,6 +34,8 @@ secrets.yaml
 .storage/onboarding
 .storage/cloud
 .storage/hassio
+# Claude plan-mode scratch files
+.claude/plans/
 # Databases, logs and caches
 *.db
 *.db-shm
