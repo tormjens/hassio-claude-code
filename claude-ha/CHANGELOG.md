@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.12
+
+- Plan mode works again. Claude saved its plan into the add-on's private data
+  folder, which the add-on blocks, so every plan was refused. Plans are now
+  saved in `.claude/plans/` in your configuration folder, and that folder is
+  left out of the add-on's git checkpoints.
+
 ## 0.1.11
 
 - Fix the usage limits refresh button doing nothing. It asked the Agent SDK's
