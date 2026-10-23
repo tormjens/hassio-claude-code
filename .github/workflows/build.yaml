@@ -41,3 +41,37 @@ jobs:
             --image "{arch}-claude-ha" \
             --docker-hub "ghcr.io/${{ github.repository_owner }}" \
             --addon
+
+  # Publish a GitHub Release (tag v<version>) once the images for that version
+  # are on ghcr.io. Skips when the tag already exists, so pushes that don't bump
+  # claude-ha/config.yaml are a no-op. The notes are the version's CHANGELOG.md
+  # section.
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(sed -n 's/^version:[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}.*/\1/p' claude-ha/config.yaml)
+          if [ -z "$version" ]; then
+            echo "::error::No version found in claude-ha/config.yaml"
+            exit 1
+          fi
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists, nothing to do."
+            exit 0
+          fi
+          awk -v v="$version" '/^## /{if(f)exit; f=($2==v); next} f' claude-ha/CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "Release $version." > notes.md
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" --title "$version" --notes-file notes.md
