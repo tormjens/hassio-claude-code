@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.13
+
+- The chat now follows along while Claude is thinking or writing, instead of
+  only jumping down when a new message starts. If you scroll up to read
+  something, it stays put until you scroll back to the bottom.
+- When Claude asks for approval or has a question for you, the chat scrolls
+  down so the card is visible right away.
+
 ## 0.1.12
 
 - Plan mode works again. Claude saved its plan into the add-on's private data

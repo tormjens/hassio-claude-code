@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import {
   ArrowUp,
   Bot,
@@ -315,11 +315,48 @@ function confirmDelete(id: string, title: string) {
   if (window.confirm(`Delete "${title}"? This cannot be undone.`)) deleteSession(id);
 }
 
+// Follow the bottom of the transcript while Claude streams (text, thinking, tool
+// input), unless the user has scrolled up to read something. Streaming grows
+// existing items without changing the item count, so watch the DOM itself.
+const stickToBottom = ref(true);
+let scrollFrame = 0;
+
+function scrollToBottom(force = false) {
+  if (force) stickToBottom.value = true;
+  if (!stickToBottom.value || scrollFrame) return;
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0;
+    const el = scroller.value;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    // Keep streaming thinking blocks scrolled to their latest line too.
+    el.querySelectorAll<HTMLElement>('[data-autoscroll]').forEach((p) => (p.scrollTop = p.scrollHeight));
+  });
+}
+
+function onScroll() {
+  const el = scroller.value;
+  if (!el) return;
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+
+const observer = new MutationObserver(() => scrollToBottom());
+watch(scroller, (el, old) => {
+  if (old) observer.disconnect();
+  if (el) observer.observe(el, { childList: true, subtree: true, characterData: true });
+});
+onBeforeUnmount(() => observer.disconnect());
+
+// Always bring these into view: switching chats, sending a message, and Claude
+// asking for approval or an answer (otherwise the card sits below the fold).
+watch(() => state.currentId, () => nextTick(() => scrollToBottom(true)));
 watch(
-  () => [currentView.value?.items.length, awaitingReply.value] as const,
-  async () => {
-    await nextTick();
-    scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' });
+  () => {
+    const v = currentView.value;
+    return [v?.items[v.items.length - 1]?.kind === 'user' ? v.items.length : 0, v?.pending.length ?? 0, v?.questions.length ?? 0];
+  },
+  ([user, pending, questions], [oldUser, oldPending, oldQuestions]) => {
+    if (user > oldUser || pending > oldPending || questions > oldQuestions) nextTick(() => scrollToBottom(true));
   },
 );
 
@@ -463,7 +500,7 @@ connect();
       </Alert>
 
       <!-- Transcript -->
-      <div ref="scroller" class="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-6">
+      <div ref="scroller" class="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-6" @scroll.passive="onScroll">
         <template v-if="currentView && currentView.items.length">
           <div class="mx-auto flex max-w-3xl flex-col gap-5">
             <template v-for="item in currentView.items" :key="item.id">
@@ -518,7 +555,10 @@ connect();
                   Thinking<span v-if="item.partial" class="animate-pulse">…</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre class="max-h-64 overflow-auto whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground">{{ item.text }}</pre>
+                  <pre
+                    class="max-h-64 overflow-auto whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground"
+                    :data-autoscroll="item.partial || undefined"
+                  >{{ item.text }}</pre>
                 </CollapsibleContent>
               </Collapsible>
 
