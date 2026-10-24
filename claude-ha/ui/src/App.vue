@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import {
   ArrowUp,
   Bot,
@@ -263,6 +263,92 @@ function fmtInput(input: unknown, partial?: string): string {
 }
 
 const toolLabel = (name: string) => name.replace('mcp__ha__', '').replace('mcp__homeassistant__', '');
+
+// Claude-style tool rows: a short verb plus the argument that matters.
+const TOOL_VERBS: Record<string, string> = {
+  Read: 'Read',
+  Write: 'Write',
+  Edit: 'Edit',
+  MultiEdit: 'Edit',
+  NotebookEdit: 'Edit',
+  Bash: 'Run',
+  Grep: 'Search',
+  Glob: 'Find files',
+  WebFetch: 'Fetch',
+  WebSearch: 'Search the web',
+  TodoWrite: 'Update todos',
+  Task: 'Agent',
+  Agent: 'Agent',
+  ha_get_states: 'Get states',
+  ha_get_services: 'Get services',
+  ha_call_service: 'Call service',
+  ha_check_config: 'Check configuration',
+  ha_reload: 'Reload',
+  ha_restart_core: 'Restart Home Assistant',
+  ha_get_logs: 'Read logs',
+  ha_list_integrations: 'List integrations',
+  ha_get_areas_devices: 'Areas and devices',
+  ha_render_template: 'Render template',
+  ha_list_secret_keys: 'List secret keys',
+};
+const toolVerb = (name: string) => TOOL_VERBS[toolLabel(name)] ?? toolLabel(name);
+
+function toolSummary(item: TranscriptItem): string {
+  if (item.kind !== 'tool_use' || !item.input || typeof item.input !== 'object') return '';
+  const i = item.input as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' ? v : Array.isArray(v) ? v.join(', ') : '');
+  switch (toolLabel(item.name)) {
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+    case 'MultiEdit':
+      return baseName(str(i.file_path));
+    case 'NotebookEdit':
+      return baseName(str(i.notebook_path));
+    case 'Bash':
+      return str(i.description) || str(i.command);
+    case 'Grep':
+      return str(i.pattern) + (i.path ? ` in ${baseName(str(i.path))}` : '');
+    case 'WebFetch':
+      return str(i.url);
+    case 'WebSearch':
+      return str(i.query);
+    case 'TodoWrite':
+      return Array.isArray(i.todos) ? `${i.todos.length} items` : '';
+    case 'ha_call_service': {
+      const target = i.target as Record<string, unknown> | undefined;
+      const svc = [str(i.domain), str(i.service)].filter(Boolean).join('.');
+      const ent = str(target?.entity_id) || str(target?.area_id) || str(target?.device_id);
+      return ent ? `${svc} → ${ent}` : svc;
+    }
+    case 'ha_get_states':
+      return str(i.entity_id) || str(i.domain) || str(i.search);
+    case 'ha_get_logs':
+      return str(i.filter);
+    case 'ha_get_areas_devices':
+      return str(i.search);
+  }
+  // Fall back to the first short string argument.
+  for (const v of Object.values(i)) if (typeof v === 'string' && v) return v.split('\n')[0];
+  return '';
+}
+
+const toolRunning = (item: TranscriptItem) =>
+  item.kind === 'tool_use' && (item.status === 'streaming' || item.status === 'pending' || item.status === 'running');
+const toolFailed = (item: TranscriptItem) => item.kind === 'tool_use' && (item.status === 'error' || item.status === 'denied');
+
+// Thinking blocks are open while streaming and fold away when done, like Claude;
+// once the user toggles one, their choice wins.
+const thinkingOpen = reactive<Record<string, boolean>>({});
+const isThinkingOpen = (item: TranscriptItem) => thinkingOpen[item.id] ?? !!(item.kind === 'thinking' && item.partial);
+function thinkingLabel(idx: number): string {
+  const items = currentView.value?.items ?? [];
+  const item = items[idx];
+  const next = items[idx + 1];
+  if (!item || !next) return 'Thought process';
+  const secs = Math.round((next.ts - item.ts) / 1000);
+  return secs >= 1 ? `Thought for ${secs}s` : 'Thought process';
+}
 const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p;
 const editViewCache = new Map<string, FileEditView | null>();
 function editView(item: TranscriptItem): FileEditView | null {
@@ -315,11 +401,48 @@ function confirmDelete(id: string, title: string) {
   if (window.confirm(`Delete "${title}"? This cannot be undone.`)) deleteSession(id);
 }
 
+// Follow the bottom of the transcript while Claude streams (text, thinking, tool
+// input), unless the user has scrolled up to read something. Streaming grows
+// existing items without changing the item count, so watch the DOM itself.
+const stickToBottom = ref(true);
+let scrollFrame = 0;
+
+function scrollToBottom(force = false) {
+  if (force) stickToBottom.value = true;
+  if (!stickToBottom.value || scrollFrame) return;
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0;
+    const el = scroller.value;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    // Keep streaming thinking blocks scrolled to their latest line too.
+    el.querySelectorAll<HTMLElement>('[data-autoscroll]').forEach((p) => (p.scrollTop = p.scrollHeight));
+  });
+}
+
+function onScroll() {
+  const el = scroller.value;
+  if (!el) return;
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+
+const observer = new MutationObserver(() => scrollToBottom());
+watch(scroller, (el, old) => {
+  if (old) observer.disconnect();
+  if (el) observer.observe(el, { childList: true, subtree: true, characterData: true });
+});
+onBeforeUnmount(() => observer.disconnect());
+
+// Always bring these into view: switching chats, sending a message, and Claude
+// asking for approval or an answer (otherwise the card sits below the fold).
+watch(() => state.currentId, () => nextTick(() => scrollToBottom(true)));
 watch(
-  () => [currentView.value?.items.length, awaitingReply.value] as const,
-  async () => {
-    await nextTick();
-    scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' });
+  () => {
+    const v = currentView.value;
+    return [v?.items[v.items.length - 1]?.kind === 'user' ? v.items.length : 0, v?.pending.length ?? 0, v?.questions.length ?? 0];
+  },
+  ([user, pending, questions], [oldUser, oldPending, oldQuestions]) => {
+    if (user > oldUser || pending > oldPending || questions > oldQuestions) nextTick(() => scrollToBottom(true));
   },
 );
 
@@ -463,10 +586,10 @@ connect();
       </Alert>
 
       <!-- Transcript -->
-      <div ref="scroller" class="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-6">
+      <div ref="scroller" class="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-6" @scroll.passive="onScroll">
         <template v-if="currentView && currentView.items.length">
           <div class="mx-auto flex max-w-3xl flex-col gap-5">
-            <template v-for="item in currentView.items" :key="item.id">
+            <template v-for="(item, idx) in currentView.items" :key="item.id">
               <div v-if="item.kind === 'user'" class="flex animate-message-in flex-col items-end gap-1.5">
                 <div v-if="item.attachments?.length" class="flex max-w-[85%] flex-wrap items-end justify-end gap-1.5 sm:max-w-[75%]">
                   <template v-for="a in item.attachments" :key="a.id">
@@ -511,41 +634,56 @@ connect();
                 </div>
               </div>
 
-              <Collapsible v-else-if="item.kind === 'thinking'" :default-open="item.partial" class="animate-message-in overflow-hidden rounded-xl border bg-muted/40">
-                <CollapsibleTrigger class="group flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50">
-                  <ChevronRight class="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
-                  <Lightbulb class="size-3.5" />
-                  Thinking<span v-if="item.partial" class="animate-pulse">…</span>
+              <!-- Thinking: a quiet, foldable line like Claude's -->
+              <Collapsible
+                v-else-if="item.kind === 'thinking'"
+                :open="isThinkingOpen(item)"
+                class="-my-2 ml-10 animate-message-in"
+                @update:open="(v: boolean) => (thinkingOpen[item.id] = v)"
+              >
+                <CollapsibleTrigger class="group flex items-center gap-1.5 rounded-md py-1 text-[13px] text-muted-foreground hover:text-foreground">
+                  <Lightbulb class="size-3.5 shrink-0" />
+                  <span v-if="item.partial" class="shimmer-text">Thinking…</span>
+                  <span v-else>{{ thinkingLabel(idx) }}</span>
+                  <ChevronRight class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre class="max-h-64 overflow-auto whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground">{{ item.text }}</pre>
+                  <div
+                    class="ml-[7px] mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words border-l-2 pl-4 text-[13px] leading-relaxed text-muted-foreground"
+                    :data-autoscroll="item.partial || undefined"
+                  >{{ item.text }}</div>
                 </CollapsibleContent>
               </Collapsible>
 
-              <!-- File edit diff (Edit / Write / MultiEdit) -->
+              <!-- Tool calls (file edits show their diff underneath) -->
               <Collapsible
-                v-else-if="item.kind === 'tool_use' && !item.hidden && FILE_EDIT_TOOLS.has(item.name)"
-                :default-open="true"
-                class="animate-message-in overflow-hidden rounded-xl border bg-muted/40"
+                v-else-if="item.kind === 'tool_use' && !item.hidden"
+                :default-open="FILE_EDIT_TOOLS.has(item.name)"
+                class="-my-2 ml-10 animate-message-in"
               >
-                <CollapsibleTrigger class="group flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent/50">
-                  <ChevronRight class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-                  <component :is="item.name === 'Write' ? FilePlus : FilePenLine" class="size-3.5 shrink-0 text-primary" />
-                  <code class="truncate font-medium" :title="editView(item)?.file">{{
-                    editView(item) ? baseName(editView(item)!.file) : toolLabel(item.name)
-                  }}</code>
-                  <span v-if="editView(item)" class="ml-auto shrink-0 font-mono text-[11px]">
+                <CollapsibleTrigger class="group flex w-full min-w-0 items-center gap-1.5 rounded-md py-1 text-left text-[13px] text-muted-foreground hover:text-foreground">
+                  <Loader2 v-if="toolRunning(item)" class="size-3.5 shrink-0 animate-spin" />
+                  <X v-else-if="toolFailed(item)" class="size-3.5 shrink-0 text-destructive" />
+                  <component
+                    :is="FILE_EDIT_TOOLS.has(item.name) ? (item.name === 'Write' ? FilePlus : FilePenLine) : Wrench"
+                    v-else
+                    class="size-3.5 shrink-0"
+                  />
+                  <span class="shrink-0 font-medium text-foreground/80" :class="toolRunning(item) && 'shimmer-text'">{{ toolVerb(item.name) }}</span>
+                  <span
+                    v-if="toolSummary(item)"
+                    class="min-w-0 truncate font-mono text-[12px]"
+                    :title="editView(item)?.file ?? toolSummary(item)"
+                  >{{ toolSummary(item) }}</span>
+                  <span v-if="editView(item)" class="shrink-0 font-mono text-[11px]">
                     <span v-if="editView(item)!.adds" class="text-success">+{{ editView(item)!.adds }}</span>
                     <span v-if="editView(item)!.dels" class="ml-1 text-destructive">-{{ editView(item)!.dels }}</span>
-                    <span
-                      v-if="item.status === 'error' || item.status === 'denied'"
-                      class="ml-1.5 rounded bg-destructive/15 px-1 text-destructive"
-                    >{{ item.status }}</span>
                   </span>
-                  <Badge v-else variant="secondary" class="ml-auto shrink-0">{{ item.status }}</Badge>
+                  <span v-if="toolFailed(item)" class="shrink-0 text-[11px] text-destructive">{{ item.status }}</span>
+                  <ChevronRight class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
                 </CollapsibleTrigger>
-                <CollapsibleContent class="space-y-2 px-3 pb-3 text-xs">
-                  <template v-if="editView(item)">
+                <CollapsibleContent class="ml-[7px] mt-1 space-y-2 border-l-2 pb-1 pl-4 text-xs">
+                  <template v-if="FILE_EDIT_TOOLS.has(item.name) && editView(item)">
                     <div
                       v-for="(blk, bi) in editView(item)!.blocks"
                       :key="bi"
@@ -574,29 +712,14 @@ connect();
                       class="max-h-40 overflow-auto rounded-lg bg-destructive/10 p-2.5 text-destructive"
                     >{{ item.result }}</pre>
                   </template>
-                  <pre v-else class="max-h-64 overflow-auto rounded-lg bg-background p-2.5">{{ fmtInput(item.input, item.inputPartial) }}</pre>
-                </CollapsibleContent>
-              </Collapsible>
-
-              <Collapsible v-else-if="item.kind === 'tool_use' && !item.hidden" class="animate-message-in overflow-hidden rounded-xl border bg-muted/40">
-                <CollapsibleTrigger class="group flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent/50">
-                  <ChevronRight class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-                  <Wrench class="size-3.5 shrink-0 text-muted-foreground" />
-                  <code class="truncate font-medium">{{ toolLabel(item.name) }}</code>
-                  <Badge
-                    variant="secondary"
-                    class="ml-auto shrink-0"
-                    :class="{
-                      'bg-destructive/15 text-destructive': item.status === 'error' || item.status === 'denied',
-                      'bg-success/15 text-success': item.status === 'done',
-                    }"
-                  >
-                    {{ item.status }}
-                  </Badge>
-                </CollapsibleTrigger>
-                <CollapsibleContent class="space-y-2 px-3 pb-3 text-xs">
-                  <pre class="max-h-64 overflow-auto rounded-lg bg-background p-2.5">{{ fmtInput(item.input, item.inputPartial) }}</pre>
-                  <pre v-if="item.result" class="max-h-64 overflow-auto rounded-lg bg-background p-2.5">{{ item.result }}</pre>
+                  <template v-else>
+                    <pre class="max-h-64 overflow-auto rounded-lg bg-muted/60 p-2.5">{{ fmtInput(item.input, item.inputPartial) }}</pre>
+                    <pre
+                      v-if="item.result"
+                      class="max-h-64 overflow-auto rounded-lg p-2.5"
+                      :class="item.isError ? 'bg-destructive/10 text-destructive' : 'bg-muted/60'"
+                    >{{ item.result }}</pre>
+                  </template>
                 </CollapsibleContent>
               </Collapsible>
 

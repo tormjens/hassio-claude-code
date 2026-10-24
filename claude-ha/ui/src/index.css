@@ -144,6 +144,27 @@
   animation: typing-bounce 1.2s infinite ease-in-out;
 }
 
+/* Sweeping highlight over "Thinking" / a running tool's label. */
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2s linear infinite;
+}
+
 /* ---- Markdown (assistant messages) ---------------------------------------- */
 .md {
   font-size: 0.875rem;

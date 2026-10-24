@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.13
+
+- The chat now follows along while Claude is thinking or writing, instead of
+  only jumping down when a new message starts. If you scroll up to read
+  something, it stays put until you scroll back to the bottom.
+- When Claude asks for approval or has a question for you, the chat scrolls
+  down so the card is visible right away.
+- Thinking and tool calls look more like Claude's own apps: compact, quiet
+  lines such as "Read automations.yaml" or "Call service light.turn_on →
+  light.kitchen" instead of boxed cards. Running steps shimmer, thinking folds
+  away when it is done ("Thought for 8s"), and click any line to see the
+  details. File edits still show their diff right away.
+
 ## 0.1.12
 
 - Plan mode works again. Claude saved its plan into the add-on's private data
