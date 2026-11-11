@@ -41,8 +41,10 @@ locally with `docker build` in `claude-ha/` or let the Supervisor build it.
   "TypeScript SDK V2 session API (removed)"; 0.3.142 dropped
   `unstable_v2_createSession` and friends. The add-on therefore uses `query()`
   with an `AsyncIterable<SDKUserMessage>` prompt (the documented, preferred
-  multi-turn pattern). One long-lived `query()` per chat session; a pushable
-  async queue feeds it user turns.
+  multi-turn pattern). One `query()` per chat session; a pushable async queue
+  feeds it user turns. Each one is a CLI process of a few hundred MB, so it is
+  closed after `idle_sleep_minutes` quiet and resumed by session id on the
+  next message.
 - **The SDK bundles the Claude Code CLI as a native binary** via optional
   platform packages, including `linux-x64-musl` and `linux-arm64-musl`. The
   brief asked to install `@anthropic-ai/claude-code` globally; that would

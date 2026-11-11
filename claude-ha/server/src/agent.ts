@@ -219,6 +219,7 @@ export class SessionRuntime {
   private consuming: Promise<void> | undefined;
   /** Uuids of sent user messages no turn has consumed yet. See settleQueued. */
   private readonly queued = new Set<string>();
+  private sleepTimer: NodeJS.Timeout | undefined;
 
   constructor(
     private readonly session: StoredSession,
@@ -313,6 +314,29 @@ export class SessionRuntime {
     if (this.status === status) return;
     this.status = status;
     this.emit({ type: 'status', sessionId: this.id, status });
+    this.armSleep();
+  }
+
+  /**
+   * Stop the process once the session has sat idle for `idle_sleep_minutes`;
+   * any other status disarms. Each process holds a few hundred MB for as long
+   * as it lives, on a host that is often a Pi, and the next message resumes the
+   * session from its transcript. Waking costs only the process start: the
+   * prompt cache lives on Anthropic's side, keyed by content, so it still hits.
+   */
+  private armSleep(): void {
+    clearTimeout(this.sleepTimer);
+    this.sleepTimer = undefined;
+    const minutes = this.deps.config.idleSleepMinutes;
+    if (this.status !== 'idle' || !this.q || !minutes) return;
+    this.sleepTimer = setTimeout(() => {
+      this.sleepTimer = undefined;
+      if (this.status !== 'idle' || this.pending.size || this.questionResolvers.size || this.queued.size) return;
+      this.deps.log.info(`session ${this.id.slice(0, 8)} idle, stopping its Claude Code process`);
+      void this.close();
+    }, minutes * 60_000);
+    // Never the reason the add-on stays up on shutdown.
+    this.sleepTimer.unref();
   }
 
   private appendItem(item: TranscriptItem): void {
@@ -458,6 +482,8 @@ export class SessionRuntime {
 
   /** Stop the SDK process. The session can be resumed later via its sdkSessionId. */
   async close(): Promise<void> {
+    clearTimeout(this.sleepTimer);
+    this.sleepTimer = undefined;
     for (const [id, p] of this.pending) {
       p.resolve({ behavior: 'deny', message: 'Session closed.' });
       this.pending.delete(id);
@@ -476,7 +502,9 @@ export class SessionRuntime {
     this.q = undefined;
     this.input = undefined;
     if (this.consuming) await this.consuming.catch(() => undefined);
-    this.setStatus('idle');
+    // A message sent while the old process was exiting has already started a
+    // new one; marking that idle would hide a running turn.
+    if (!this.q) this.setStatus('idle');
   }
 
   // ---------------------------------------------------------------------------
