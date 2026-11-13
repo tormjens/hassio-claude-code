@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.16
+
+- The chat panel can now be translated. It follows the language set in your
+  Home Assistant profile (or your browser's) and falls back to English.
+  French and Norwegian (Bokmål) are included, along with French and Norwegian
+  descriptions for the add-on options. See "Translations" in the README to
+  add another language.
+
 ## 0.1.15
 
 - Fix a message sent just as an idle chat was being put to sleep: the old

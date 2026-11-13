@@ -1,0 +1,169 @@
+{
+  "app": {
+    "name": "Claude",
+    "tagline": "pour Home Assistant"
+  },
+  "sidebar": {
+    "newChat": "Nouvelle discussion",
+    "recent": "Récentes",
+    "noChats": "Aucune discussion pour l'instant",
+    "rename": "Renommer",
+    "delete": "Supprimer",
+    "renamePrompt": "Renommer la discussion",
+    "deleteConfirm": "Supprimer « {title} » ? Cette action est irréversible.",
+    "closeMenu": "Fermer le menu",
+    "openMenu": "Ouvrir le menu"
+  },
+  "auth": {
+    "subscription": "Abonnement Claude",
+    "apiKey": "Clé API",
+    "connected": "Connecté",
+    "notSignedIn": "Non connecté",
+    "noApiKey": "Aucune clé API Anthropic configurée",
+    "oauthHelpBefore": "Exécutez",
+    "oauthHelpAfter": "sur un ordinateur connecté à votre abonnement Claude, collez le jeton dans les options de l'add-on, puis redémarrez l'add-on.",
+    "apiKeyHelp": "Ajoutez une clé API dans Paramètres → Add-ons → Claude for Home Assistant → Configuration, puis redémarrez l'add-on.",
+    "howToSetUp": "Comment configurer"
+  },
+  "setup": {
+    "title": "Authentification",
+    "oauthDescription": "Abonnement Claude (jeton OAuth)",
+    "apiKeyDescription": "Clé API statique",
+    "oauthIntro": "Cet add-on se connecte avec un abonnement Claude. Générez un jeton une seule fois et collez-le dans les options de l'add-on.",
+    "oauthStep1": "Sur n'importe quel ordinateur disposant de Claude Code et connecté à votre compte Claude Pro, Max, Team ou Enterprise, exécutez :",
+    "oauthStep2": "Validez la connexion dans le navigateur. Un jeton longue durée (valable environ un an) s'affiche.",
+    "oauthStep3": "Dans Home Assistant, ouvrez Paramètres → Add-ons → Claude for Home Assistant → Configuration, renseignez le jeton OAuth, puis redémarrez l'add-on.",
+    "tokenConfigured": "Un jeton est configuré",
+    "tokenMissing": "Aucun jeton configuré pour l'instant",
+    "apiKeyIntro": "Cet add-on utilise une clé API Anthropic statique, facturée sur votre compte API.",
+    "apiKeySwitchBefore": "Pour utiliser plutôt votre abonnement Claude, choisissez la méthode d'authentification",
+    "apiKeySwitchMiddle": "dans les options de l'add-on, puis lancez",
+    "apiKeySwitchAfter": "comme indiqué dans la documentation.",
+    "apiKeyConfigured": "Une clé API est configurée",
+    "apiKeyMissing": "Aucune clé API configurée pour l'instant",
+    "close": "Fermer"
+  },
+  "connection": {
+    "open": "Connecté",
+    "connecting": "Connexion…",
+    "closed": "Reconnexion…",
+    "notConnected": "Pas de connexion à l'add-on. Reconnexion…"
+  },
+  "header": {
+    "revertChanges": "Annuler les modifications",
+    "revert": "Annuler",
+    "newChat": "Nouvelle discussion"
+  },
+  "empty": {
+    "morning": "Bonjour",
+    "afternoon": "Bon après-midi",
+    "evening": "Bonsoir",
+    "intro": "Interrogez Claude sur votre configuration Home Assistant, vos automatisations et vos entités.",
+    "example1": "Liste toutes mes lumières et indique si elles sont allumées",
+    "example2": "Montre mes automatisations et ce qui les déclenche",
+    "example3": "Vérifie ma configuration à la recherche d'erreurs"
+  },
+  "transcript": {
+    "thinking": "Réflexion…",
+    "thoughtProcess": "Raisonnement",
+    "thoughtFor": "A réfléchi {seconds} s",
+    "changeNotApplied": "La modification n'a pas été appliquée.",
+    "status": {
+      "error": "erreur",
+      "denied": "refusé"
+    },
+    "turns": {
+      "one": "{count} tour",
+      "other": "{count} tours"
+    }
+  },
+  "tools": {
+    "Read": "Lire",
+    "Write": "Écrire",
+    "Edit": "Modifier",
+    "Bash": "Exécuter",
+    "Grep": "Rechercher",
+    "Glob": "Trouver des fichiers",
+    "WebFetch": "Récupérer",
+    "WebSearch": "Rechercher sur le web",
+    "TodoWrite": "Mettre à jour les tâches",
+    "Agent": "Agent",
+    "ha_get_states": "Lire les états",
+    "ha_get_services": "Lister les services",
+    "ha_call_service": "Appeler un service",
+    "ha_check_config": "Vérifier la configuration",
+    "ha_reload": "Recharger",
+    "ha_restart_core": "Redémarrer Home Assistant",
+    "ha_get_logs": "Lire les journaux",
+    "ha_list_integrations": "Lister les intégrations",
+    "ha_get_areas_devices": "Pièces et appareils",
+    "ha_render_template": "Évaluer un modèle",
+    "ha_list_secret_keys": "Lister les clés secrètes",
+    "grepIn": "{pattern} dans {path}",
+    "todoItems": {
+      "one": "{count} élément",
+      "other": "{count} éléments"
+    }
+  },
+  "question": {
+    "title": "Claude a besoin de votre avis",
+    "progress": "Question {current} sur {total}",
+    "selectAll": "Plusieurs choix possibles",
+    "back": "Retour",
+    "next": "Suivant",
+    "submit": "Envoyer la réponse"
+  },
+  "permission": {
+    "wantsToUse": "Claude veut utiliser {tool}",
+    "approve": "Approuver",
+    "deny": "Refuser",
+    "alwaysAllow": "Toujours autoriser"
+  },
+  "modes": {
+    "ask": "Demander à chaque fois",
+    "acceptEdits": "Approuver les modifications",
+    "plan": "Planifier uniquement"
+  },
+  "composer": {
+    "placeholder": "Posez une question à Claude sur votre Home Assistant…",
+    "placeholderQueue": "Ajouter une consigne à la tâche en cours…",
+    "attach": "Joindre des captures d'écran ou des fichiers",
+    "remove": "Retirer",
+    "model": "Modèle",
+    "defaultModel": "Modèle par défaut",
+    "permissionMode": "Mode d'autorisation",
+    "stop": "Arrêter",
+    "send": "Envoyer",
+    "sendQueue": "Envoyer : Claude le lira à sa prochaine étape",
+    "hint": "Entrée pour envoyer · Maj + Entrée pour aller à la ligne · Collez ou déposez des captures et des fichiers",
+    "tooManyFiles": "{max} fichiers au maximum par message.",
+    "uploadFailed": "Échec de l'envoi ({status})"
+  },
+  "usage": {
+    "title": "Limites d'utilisation",
+    "refresh": "Actualiser",
+    "limitReached": "Limite d'utilisation atteinte.",
+    "approaching": "Vous approchez de votre limite d'utilisation.",
+    "resets": "Réinitialisation {when}",
+    "resetsSentence": "Réinitialisation {when}.",
+    "now": "maintenant",
+    "inMinutes": "dans {minutes} min",
+    "inHours": "dans {hours} h {minutes} min",
+    "extraUsage": "Utilisation supplémentaire",
+    "extraOf": "{used} sur {limit}",
+    "updatedJustNow": "Mis à jour à l'instant",
+    "updatedMinutesAgo": "Mis à jour il y a {minutes} min",
+    "updatedAt": "Mis à jour à {time}",
+    "updating": "Mise à jour…",
+    "fetching": "Récupération de l'utilisation…",
+    "hint": "Affiché après la prochaine réponse de Claude, ou appuyez sur actualiser.",
+    "windows": {
+      "five_hour": "Session en cours",
+      "seven_day": "Hebdomadaire · tous les modèles",
+      "seven_day_opus": "Hebdomadaire · Opus",
+      "seven_day_sonnet": "Hebdomadaire · Sonnet",
+      "seven_day_oauth_apps": "Hebdomadaire · applications",
+      "seven_day_overage_included": "Hebdomadaire · modèles inclus"
+    }
+  }
+}
