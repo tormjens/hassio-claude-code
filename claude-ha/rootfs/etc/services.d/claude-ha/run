@@ -55,6 +55,9 @@ CLAUDE_HA_AUTO_APPROVE_READONLY=$(bashio::config 'auto_approve_readonly_tools' '
 export CLAUDE_HA_SEND_WHILE_WORKING
 CLAUDE_HA_SEND_WHILE_WORKING=$(bashio::config 'send_while_working' 'true')
 
+export CLAUDE_HA_IDLE_SLEEP_MINUTES
+CLAUDE_HA_IDLE_SLEEP_MINUTES=$(bashio::config 'idle_sleep_minutes' '10')
+
 export CLAUDE_HA_CONFIG_DIR=/config
 export CLAUDE_HA_DATA_DIR=/data
 export CLAUDE_HA_PORT="${CLAUDE_HA_PORT:-8099}"

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.14
+
+- A chat left alone for ten minutes stops its Claude Code process, which held
+  a few hundred MB of memory for as long as the add-on ran; the next message
+  starts it again on the same conversation, a few seconds slower to begin.
+  The new `idle_sleep_minutes` option sets the wait; `0` keeps every process
+  running, as before.
+
 ## 0.1.13
 
 - The chat now follows along while Claude is thinking or writing, instead of

@@ -38,3 +38,10 @@ configuration:
       When enabled, you can keep typing while Claude works. Claude reads the
       new message at its next step, or right after it finishes. Turn off to
       block sending until the current reply is done.
+  idle_sleep_minutes:
+    name: Stop idle chats after (minutes)
+    description: >-
+      Each chat runs its own Claude Code process, which uses a few hundred MB
+      of memory. After this many quiet minutes the process stops, and the next
+      message starts it again on the same conversation, a few seconds slower.
+      0 keeps every process running.

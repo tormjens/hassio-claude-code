@@ -36,6 +36,8 @@ export interface AppConfig {
   autoApproveReadOnly: boolean;
   /** Accept a message while a turn is running; the CLI queues it. */
   sendWhileWorking: boolean;
+  /** Stop a session's Claude Code process after this many idle minutes; 0 never does. */
+  idleSleepMinutes: number;
   /** Extra directory the agent may access read-only (ssl certificates). */
   version: string;
 }
@@ -56,6 +58,11 @@ function readVersion(): string {
   } catch {
     return '0.0.0';
   }
+}
+
+function envMinutes(name: string, fallback: number): number {
+  const v = Number(process.env[name] || fallback);
+  return Number.isFinite(v) && v >= 0 ? v : fallback;
 }
 
 function envBool(name: string, fallback: boolean): boolean {
@@ -100,6 +107,7 @@ export function loadConfig(): AppConfig {
     supervisorUrl: process.env.SUPERVISOR_URL ?? 'http://supervisor',
     autoApproveReadOnly: envBool('CLAUDE_HA_AUTO_APPROVE_READONLY', true),
     sendWhileWorking: envBool('CLAUDE_HA_SEND_WHILE_WORKING', true),
+    idleSleepMinutes: envMinutes('CLAUDE_HA_IDLE_SLEEP_MINUTES', 10),
     version: readVersion(),
   };
 }
