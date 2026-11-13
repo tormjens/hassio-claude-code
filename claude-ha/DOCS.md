@@ -67,6 +67,10 @@ reply at no extra cost. The refresh button fetches them on demand by sending a
 one-token request, which counts (negligibly) toward your usage. A warning
 appears when you are close to a limit. Hidden when you use an API key.
 
+**Language**: the panel uses the language set in your Home Assistant profile,
+or your browser's, and falls back to English. Available: English, French and
+Norwegian (Bokmål). Claude itself replies in the language you write in.
+
 ## Configuration options
 
 | Option                        | Default  | Description                                                                                     |

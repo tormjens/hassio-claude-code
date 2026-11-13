@@ -21,6 +21,7 @@ import type {
   TranscriptItem,
   UsageLimits,
 } from '../../server/src/protocol';
+import { t } from './i18n';
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
 
@@ -231,7 +232,7 @@ export function connect(): void {
 
 export function send(msg: ClientMessage): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    pushError('Not connected to the add-on. Reconnecting…');
+    pushError(t('connection.notConnected'));
     return;
   }
   ws.send(JSON.stringify(msg));
@@ -293,7 +294,7 @@ export async function uploadFile(file: File, name = file.name): Promise<Attachme
     body: file,
   });
   const body = (await res.json().catch(() => ({}))) as Partial<Attachment> & { error?: string };
-  if (!res.ok) throw new Error(body.error ?? `Upload failed (${res.status})`);
+  if (!res.ok) throw new Error(body.error ?? t('composer.uploadFailed', { status: res.status }));
   return body as Attachment;
 }
 

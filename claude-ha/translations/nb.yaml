@@ -1,0 +1,50 @@
+configuration:
+  auth_method:
+    name: Autentiseringsmetode
+    description: >-
+      «oauth» (anbefalt) bruker et Claude-abonnement: kjør `claude setup-token`
+      på en datamaskin som er logget inn på Claude Pro-, Max-, Team- eller
+      Enterprise-kontoen din, og lim inn tokenet nedenfor. «api_key» bruker en
+      statisk Anthropic API-nøkkel som faktureres API-kontoen din.
+  oauth_token:
+    name: OAuth-token for abonnementet
+    description: >-
+      Token fra `claude setup-token`. Kommandoen åpner en innlogging mot
+      Claude-abonnementet ditt i nettleseren og skriver ut et langvarig token
+      (gyldig i omtrent ett år). Brukes bare når autentiseringsmetoden er
+      «oauth».
+  anthropic_api_key:
+    name: Anthropic API-nøkkel (eldre metode)
+    description: >-
+      Brukes bare når autentiseringsmetoden er «api_key». API-nøkkel fra Claude
+      Console. Bruken faktureres Anthropic-kontoen din. La feltet stå tomt hvis
+      du sender forespørsler gjennom en gateway som håndterer autentiseringen
+      selv.
+  anthropic_base_url:
+    name: Base-URL for API
+    description: >-
+      Valgfritt. Send forespørsler til et egendefinert Anthropic-kompatibelt
+      endepunkt eller en gateway i stedet for api.anthropic.com.
+  log_level:
+    name: Loggnivå
+    description: Hvor detaljert loggen for tillegget skal være.
+  auto_approve_readonly_tools:
+    name: Godkjenn skrivebeskyttede Home Assistant-verktøy automatisk
+    description: >-
+      Når dette er på, kjører verktøy som bare leser fra Home Assistant
+      (tilstander, tjenester, områder, logger, maler) uten å spørre om
+      tillatelse. Skriving følger alltid tillatelsesmodusen som er valgt i
+      samtalen.
+  send_while_working:
+    name: Send meldinger mens Claude jobber
+    description: >-
+      Når dette er på, kan du fortsette å skrive mens Claude jobber. Claude
+      leser den nye meldingen ved neste steg, eller rett etter at den er ferdig.
+      Slå av for å blokkere sending til det pågående svaret er ferdig.
+  idle_sleep_minutes:
+    name: Stopp inaktive samtaler etter (minutter)
+    description: >-
+      Hver samtale kjører sin egen Claude Code-prosess, som bruker noen hundre
+      MB minne. Etter så mange stille minutter stopper prosessen, og neste
+      melding starter den igjen i samme samtale, noen sekunder tregere. 0
+      holder alle prosessene i gang.

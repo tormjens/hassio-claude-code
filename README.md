@@ -189,6 +189,29 @@ cd claude-ha/ui && npm run build         # build + type-check the UI
 
 ---
 
+## Translations
+
+The chat panel follows the language set in your Home Assistant profile (or the
+browser's language), falling back to English. It ships in English, French and
+Norwegian Bokmål.
+
+To add a language:
+
+1. Copy `claude-ha/ui/src/i18n/locales/en.json` to `<code>.json`, using the
+   same language code Home Assistant uses (`de`, `pt-BR`, `nb`, ...), and
+   translate the values. Keep the keys and `{placeholders}` as they are. Plural
+   strings are objects with `one`/`other` (and `few`/`many` where your language
+   needs them). Missing keys fall back to English, so a partial file works.
+2. Optionally translate the add-on options shown on the Configuration tab:
+   copy `claude-ha/translations/en.yaml` to `<code>.yaml`.
+3. Run `cd claude-ha/ui && npm run build` to check it, and open a pull request.
+
+Messages that come from the server or from Claude itself (errors, tool
+results, Claude's replies) are not covered by these files. Claude answers in
+whatever language you write to it.
+
+---
+
 ## Building the image
 
 The Supervisor builds the image on install. To build it yourself, from
