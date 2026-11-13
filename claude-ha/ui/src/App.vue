@@ -78,6 +78,7 @@ import { Toaster } from '@/components/ui/sonner';
 import Markdown from '@/components/Markdown.vue';
 import UsageMeter from '@/components/UsageMeter.vue';
 import { FILE_EDIT_TOOLS, fileEditView, type FileEditView } from '@/lib/diff';
+import { t, tr } from '@/i18n';
 
 const DEFAULT_MODEL = '__default__';
 
@@ -101,12 +102,10 @@ const awaitingReply = computed(() => {
   return !last || last.kind === 'user';
 });
 
-const modes: Array<{ label: string; value: PermissionModeUi }> = [
-  { value: 'ask', label: 'Ask every time' },
-  { value: 'acceptEdits', label: 'Auto-approve edits' },
-  { value: 'plan', label: 'Plan only' },
-];
-const modeLabel = (v?: string) => modes.find((m) => m.value === v)?.label ?? 'Ask every time';
+const modes = computed<Array<{ label: string; value: PermissionModeUi }>>(() =>
+  (['ask', 'acceptEdits', 'plan'] as const).map((value) => ({ value, label: t(`modes.${value}`) })),
+);
+const modeLabel = (v?: string) => modes.value.find((m) => m.value === v)?.label ?? t('modes.ask');
 
 const auth = computed(() => state.settings?.auth ?? null);
 const authConfigured = computed(() => auth.value?.configured ?? false);
@@ -116,7 +115,7 @@ const models = computed(() => state.settings?.models ?? []);
 const currentModel = computed(() => currentSession.value?.model ?? DEFAULT_MODEL);
 const currentModelLabel = computed(() => {
   const m = currentSession.value?.model;
-  if (!m) return 'Default model';
+  if (!m) return t('composer.defaultModel');
   return models.value.find((x) => x.value === m)?.label ?? m;
 });
 function onModelChange(v: unknown) {
@@ -126,14 +125,13 @@ function onModelChange(v: unknown) {
 
 const greeting = computed(() => {
   const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  return t(h < 12 ? 'empty.morning' : h < 18 ? 'empty.afternoon' : 'empty.evening');
 });
 
-const examples = [
-  'List all my lights and whether they are on',
-  'Show my automations and what triggers them',
-  'Check my configuration for errors',
-];
+const examples = computed(() => [t('empty.example1'), t('empty.example2'), t('empty.example3')]);
+
+/** The server names every new chat "New chat" until its first message. */
+const sessionTitle = (title?: string | null) => (!title || title === 'New chat' ? t('sidebar.newChat') : title);
 
 // Files attached to the message being composed. Each uploads as soon as it is
 // added; the message only references the ids once they are all done.
@@ -179,7 +177,7 @@ function pastedName(file: File): string {
 function addFiles(files: Iterable<File>, pasted = false) {
   for (const file of files) {
     if (pendingFiles.value.length >= MAX_FILES) {
-      pushError(`At most ${MAX_FILES} files per message.`);
+      pushError(t('composer.tooManyFiles', { max: MAX_FILES }));
       break;
     }
     const name = pasted ? pastedName(file) : file.name;
@@ -265,33 +263,12 @@ function fmtInput(input: unknown, partial?: string): string {
 const toolLabel = (name: string) => name.replace('mcp__ha__', '').replace('mcp__homeassistant__', '');
 
 // Claude-style tool rows: a short verb plus the argument that matters.
-const TOOL_VERBS: Record<string, string> = {
-  Read: 'Read',
-  Write: 'Write',
-  Edit: 'Edit',
-  MultiEdit: 'Edit',
-  NotebookEdit: 'Edit',
-  Bash: 'Run',
-  Grep: 'Search',
-  Glob: 'Find files',
-  WebFetch: 'Fetch',
-  WebSearch: 'Search the web',
-  TodoWrite: 'Update todos',
-  Task: 'Agent',
-  Agent: 'Agent',
-  ha_get_states: 'Get states',
-  ha_get_services: 'Get services',
-  ha_call_service: 'Call service',
-  ha_check_config: 'Check configuration',
-  ha_reload: 'Reload',
-  ha_restart_core: 'Restart Home Assistant',
-  ha_get_logs: 'Read logs',
-  ha_list_integrations: 'List integrations',
-  ha_get_areas_devices: 'Areas and devices',
-  ha_render_template: 'Render template',
-  ha_list_secret_keys: 'List secret keys',
+// Verbs live under "tools.<name>" in the locale files; aliases share one.
+const TOOL_ALIASES: Record<string, string> = { MultiEdit: 'Edit', NotebookEdit: 'Edit', Task: 'Agent' };
+const toolVerb = (name: string) => {
+  const label = toolLabel(name);
+  return tr(`tools.${TOOL_ALIASES[label] ?? label}`) ?? label;
 };
-const toolVerb = (name: string) => TOOL_VERBS[toolLabel(name)] ?? toolLabel(name);
 
 function toolSummary(item: TranscriptItem): string {
   if (item.kind !== 'tool_use' || !item.input || typeof item.input !== 'object') return '';
@@ -308,13 +285,13 @@ function toolSummary(item: TranscriptItem): string {
     case 'Bash':
       return str(i.description) || str(i.command);
     case 'Grep':
-      return str(i.pattern) + (i.path ? ` in ${baseName(str(i.path))}` : '');
+      return i.path ? t('tools.grepIn', { pattern: str(i.pattern), path: baseName(str(i.path)) }) : str(i.pattern);
     case 'WebFetch':
       return str(i.url);
     case 'WebSearch':
       return str(i.query);
     case 'TodoWrite':
-      return Array.isArray(i.todos) ? `${i.todos.length} items` : '';
+      return Array.isArray(i.todos) ? t('tools.todoItems', { count: i.todos.length }) : '';
     case 'ha_call_service': {
       const target = i.target as Record<string, unknown> | undefined;
       const svc = [str(i.domain), str(i.service)].filter(Boolean).join('.');
@@ -345,9 +322,9 @@ function thinkingLabel(idx: number): string {
   const items = currentView.value?.items ?? [];
   const item = items[idx];
   const next = items[idx + 1];
-  if (!item || !next) return 'Thought process';
+  if (!item || !next) return t('transcript.thoughtProcess');
   const secs = Math.round((next.ts - item.ts) / 1000);
-  return secs >= 1 ? `Thought for ${secs}s` : 'Thought process';
+  return secs >= 1 ? t('transcript.thoughtFor', { seconds: secs }) : t('transcript.thoughtProcess');
 }
 const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p;
 const editViewCache = new Map<string, FileEditView | null>();
@@ -394,11 +371,11 @@ function startChat() {
   sidebarOpen.value = false;
 }
 function promptRename(id: string, current: string) {
-  const title = window.prompt('Rename chat', current);
+  const title = window.prompt(t('sidebar.renamePrompt'), sessionTitle(current));
   if (title && title.trim()) renameSession(id, title.trim());
 }
 function confirmDelete(id: string, title: string) {
-  if (window.confirm(`Delete "${title}"? This cannot be undone.`)) deleteSession(id);
+  if (window.confirm(t('sidebar.deleteConfirm', { title: sessionTitle(title) }))) deleteSession(id);
 }
 
 // Follow the bottom of the transcript while Claude streams (text, thinking, tool
@@ -468,22 +445,22 @@ connect();
           <Bot class="size-5" />
         </div>
         <div class="min-w-0 leading-tight">
-          <p class="font-semibold">Claude</p>
-          <p class="truncate text-xs text-muted-foreground">for Home Assistant</p>
+          <p class="font-semibold">{{ t('app.name') }}</p>
+          <p class="truncate text-xs text-muted-foreground">{{ t('app.tagline') }}</p>
         </div>
-        <Button size="icon" variant="ghost" class="ml-auto md:hidden" @click="sidebarOpen = false">
+        <Button size="icon" variant="ghost" class="ml-auto md:hidden" :title="t('sidebar.closeMenu')" @click="sidebarOpen = false">
           <X class="size-4" />
         </Button>
       </div>
 
       <div class="px-3">
         <Button variant="outline" class="w-full justify-start gap-2 shadow-sm" @click="startChat">
-          <MessageSquarePlus class="size-4" /> New chat
+          <MessageSquarePlus class="size-4" /> {{ t('sidebar.newChat') }}
         </Button>
       </div>
 
       <p v-if="state.sessions.length" class="px-4 pb-1.5 pt-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        Recent
+        {{ t('sidebar.recent') }}
       </p>
       <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2" :class="state.sessions.length ? '' : 'flex items-center justify-center'">
         <ul v-if="state.sessions.length" class="space-y-0.5">
@@ -494,12 +471,12 @@ connect();
               @click="pickSession(s.id)"
             >
               <MessageSquareText class="size-4 shrink-0 opacity-70" />
-              <span class="flex-1 truncate">{{ s.title }}</span>
+              <span class="flex-1 truncate">{{ sessionTitle(s.title) }}</span>
               <span class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
-                <Button size="icon" variant="ghost" class="size-6" @click.stop="promptRename(s.id, s.title)">
+                <Button size="icon" variant="ghost" class="size-6" :title="t('sidebar.rename')" @click.stop="promptRename(s.id, s.title)">
                   <Pencil class="size-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" class="size-6 text-muted-foreground hover:text-destructive" @click.stop="confirmDelete(s.id, s.title)">
+                <Button size="icon" variant="ghost" class="size-6 text-muted-foreground hover:text-destructive" :title="t('sidebar.delete')" @click.stop="confirmDelete(s.id, s.title)">
                   <Trash2 class="size-3.5" />
                 </Button>
               </span>
@@ -508,7 +485,7 @@ connect();
         </ul>
         <div v-else class="px-4 text-center text-xs text-muted-foreground">
           <MessageSquareText class="mx-auto mb-2 size-6 opacity-40" />
-          No chats yet
+          {{ t('sidebar.noChats') }}
         </div>
       </div>
 
@@ -525,8 +502,8 @@ connect();
             <component :is="authConfigured ? ShieldCheck : ShieldAlert" class="size-4" />
           </div>
           <div class="min-w-0 flex-1 leading-tight">
-            <p class="truncate text-[13px] font-medium">{{ isOauth ? 'Claude subscription' : 'API key' }}</p>
-            <p class="truncate text-xs text-muted-foreground">{{ authConfigured ? 'Connected' : 'Not signed in' }}</p>
+            <p class="truncate text-[13px] font-medium">{{ isOauth ? t('auth.subscription') : t('auth.apiKey') }}</p>
+            <p class="truncate text-xs text-muted-foreground">{{ authConfigured ? t('auth.connected') : t('auth.notSignedIn') }}</p>
           </div>
           <span class="shrink-0 text-[11px] text-muted-foreground">v{{ state.settings?.version ?? '' }}</span>
         </button>
@@ -536,17 +513,17 @@ connect();
     <!-- Main -->
     <main class="flex min-w-0 flex-1 flex-col">
       <header class="flex h-14 items-center gap-2 border-b px-3 sm:px-4">
-        <Button size="icon" variant="ghost" class="md:hidden" @click="sidebarOpen = true">
+        <Button size="icon" variant="ghost" class="md:hidden" :title="t('sidebar.openMenu')" @click="sidebarOpen = true">
           <Menu class="size-5" />
         </Button>
         <div class="min-w-0 leading-tight">
-          <p class="truncate font-semibold">{{ currentSession?.title ?? 'New chat' }}</p>
+          <p class="truncate font-semibold">{{ sessionTitle(currentSession?.title) }}</p>
           <p class="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span
               class="inline-block size-1.5 rounded-full"
               :class="state.connection === 'open' ? 'bg-success' : state.connection === 'connecting' ? 'bg-warning' : 'bg-destructive'"
             />
-            {{ state.connection === 'open' ? 'Connected' : state.connection === 'connecting' ? 'Connecting…' : 'Reconnecting…' }}
+            {{ t(`connection.${state.connection}`) }}
           </p>
         </div>
         <div class="ml-auto flex items-center gap-2">
@@ -557,9 +534,9 @@ connect();
             class="gap-1.5"
             @click="revertSession(currentSession.id)"
           >
-            <Undo2 class="size-3.5" /> <span class="hidden sm:inline">Revert changes</span><span class="sm:hidden">Revert</span>
+            <Undo2 class="size-3.5" /> <span class="hidden sm:inline">{{ t('header.revertChanges') }}</span><span class="sm:hidden">{{ t('header.revert') }}</span>
           </Button>
-          <Button size="icon" variant="ghost" class="rounded-full" title="New chat" @click="startChat">
+          <Button size="icon" variant="ghost" class="rounded-full" :title="t('header.newChat')" @click="startChat">
             <Plus class="size-5" />
           </Button>
         </div>
@@ -570,17 +547,17 @@ connect();
         class="mx-3 mt-3 w-auto border-warning/40 bg-warning/5 text-warning [&>svg]:text-warning"
       >
         <ShieldAlert />
-        <AlertTitle>{{ isOauth ? 'Not signed in' : 'No Anthropic API key configured' }}</AlertTitle>
+        <AlertTitle>{{ isOauth ? t('auth.notSignedIn') : t('auth.noApiKey') }}</AlertTitle>
         <AlertDescription class="text-warning/90">
           <span v-if="isOauth">
-            Run <code class="rounded bg-warning/10 px-1">claude setup-token</code> on a computer signed in to your Claude
-            subscription, paste the token into the add-on options, then restart the add-on.
+            {{ t('auth.oauthHelpBefore') }} <code class="rounded bg-warning/10 px-1">claude setup-token</code>
+            {{ t('auth.oauthHelpAfter') }}
           </span>
           <span v-else>
-            Add an API key under Settings → Add-ons → Claude for Home Assistant → Configuration, then restart the add-on.
+            {{ t('auth.apiKeyHelp') }}
           </span>
           <Button size="sm" variant="outline" class="mt-2 w-fit border-warning/40" @click="setupOpen = true">
-            How to set up
+            {{ t('auth.howToSetUp') }}
           </Button>
         </AlertDescription>
       </Alert>
@@ -643,7 +620,7 @@ connect();
               >
                 <CollapsibleTrigger class="group flex items-center gap-1.5 rounded-md py-1 text-[13px] text-muted-foreground hover:text-foreground">
                   <Lightbulb class="size-3.5 shrink-0" />
-                  <span v-if="item.partial" class="shimmer-text">Thinking…</span>
+                  <span v-if="item.partial" class="shimmer-text">{{ t('transcript.thinking') }}</span>
                   <span v-else>{{ thinkingLabel(idx) }}</span>
                   <ChevronRight class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
                 </CollapsibleTrigger>
@@ -679,7 +656,7 @@ connect();
                     <span v-if="editView(item)!.adds" class="text-success">+{{ editView(item)!.adds }}</span>
                     <span v-if="editView(item)!.dels" class="ml-1 text-destructive">-{{ editView(item)!.dels }}</span>
                   </span>
-                  <span v-if="toolFailed(item)" class="shrink-0 text-[11px] text-destructive">{{ item.status }}</span>
+                  <span v-if="toolFailed(item)" class="shrink-0 text-[11px] text-destructive">{{ tr(`transcript.status.${item.status}`) ?? item.status }}</span>
                   <ChevronRight class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
                 </CollapsibleTrigger>
                 <CollapsibleContent class="ml-[7px] mt-1 space-y-2 border-l-2 pb-1 pl-4 text-xs">
@@ -706,7 +683,7 @@ connect();
                         </div>
                       </div>
                     </div>
-                    <p v-if="item.status === 'denied'" class="text-muted-foreground">Change was not applied.</p>
+                    <p v-if="item.status === 'denied'" class="text-muted-foreground">{{ t('transcript.changeNotApplied') }}</p>
                     <pre
                       v-if="item.isError && item.result"
                       class="max-h-40 overflow-auto rounded-lg bg-destructive/10 p-2.5 text-destructive"
@@ -733,7 +710,7 @@ connect();
               </Alert>
 
               <p v-else-if="item.kind === 'result'" class="text-center text-[11px] text-muted-foreground">
-                {{ (item.durationMs / 1000).toFixed(1) }}s · {{ item.numTurns }} {{ item.numTurns === 1 ? 'turn' : 'turns' }} · ${{ item.costUsd.toFixed(4) }}
+                {{ (item.durationMs / 1000).toFixed(1) }}s · {{ t('transcript.turns', { count: item.numTurns }) }} · ${{ item.costUsd.toFixed(4) }}
               </p>
             </template>
 
@@ -755,9 +732,9 @@ connect();
               class="animate-message-in gap-0 overflow-hidden border-primary/40 py-0 shadow-md"
             >
               <div class="flex items-center gap-2 border-b bg-primary/5 px-4 py-2.5 text-sm font-medium">
-                <CircleHelp class="size-4 text-primary" /> Claude needs your input
+                <CircleHelp class="size-4 text-primary" /> {{ t('question.title') }}
                 <span v-if="req.questions.length > 1" class="ml-auto text-xs font-normal text-muted-foreground">
-                  Question {{ stepOf(req) + 1 }} of {{ req.questions.length }}
+                  {{ t('question.progress', { current: stepOf(req) + 1, total: req.questions.length }) }}
                 </span>
               </div>
 
@@ -765,7 +742,7 @@ connect();
                 <div v-show="qi === stepOf(req)" class="space-y-3 p-4">
                   <div class="flex items-center gap-2">
                     <Badge variant="secondary" class="bg-primary/10 text-primary">{{ q.header }}</Badge>
-                    <span v-if="q.multiSelect" class="text-[11px] text-muted-foreground">Select all that apply</span>
+                    <span v-if="q.multiSelect" class="text-[11px] text-muted-foreground">{{ t('question.selectAll') }}</span>
                   </div>
                   <p class="font-medium">{{ q.question }}</p>
                   <div class="grid gap-2">
@@ -798,7 +775,7 @@ connect();
 
               <CardFooter class="items-center gap-2 border-t px-4 py-3">
                 <Button v-if="stepOf(req) > 0" size="sm" variant="ghost" @click="prevStep(req)">
-                  <ChevronLeft class="size-4" /> Back
+                  <ChevronLeft class="size-4" /> {{ t('question.back') }}
                 </Button>
                 <div v-if="req.questions.length > 1" class="flex items-center gap-1">
                   <span
@@ -809,7 +786,7 @@ connect();
                   />
                 </div>
                 <Button size="sm" class="ml-auto" :disabled="!stepAnswered(req)" @click="nextStep(req)">
-                  {{ isLastStep(req) ? 'Submit answer' : 'Next' }}
+                  {{ isLastStep(req) ? t('question.submit') : t('question.next') }}
                   <ChevronRight v-if="!isLastStep(req)" class="size-4" />
                 </Button>
               </CardFooter>
@@ -819,7 +796,7 @@ connect();
               <CardHeader class="px-4">
                 <div class="flex items-center gap-2 font-medium">
                   <ShieldAlert class="size-4 text-primary" />
-                  {{ p.title ?? `Claude wants to use ${toolLabel(p.toolName)}` }}
+                  {{ p.title ?? t('permission.wantsToUse', { tool: toolLabel(p.toolName) }) }}
                 </div>
               </CardHeader>
               <CardContent class="px-4">
@@ -827,13 +804,13 @@ connect();
               </CardContent>
               <CardFooter class="flex-wrap gap-2 px-4">
                 <Button size="sm" @click="respondPermission(p.requestId, 'allow')">
-                  <Check class="size-4" /> Approve
+                  <Check class="size-4" /> {{ t('permission.approve') }}
                 </Button>
                 <Button size="sm" variant="secondary" @click="respondPermission(p.requestId, 'deny')">
-                  <X class="size-4" /> Deny
+                  <X class="size-4" /> {{ t('permission.deny') }}
                 </Button>
                 <Button v-if="p.canAlwaysAllow" size="sm" variant="ghost" @click="respondPermission(p.requestId, 'allow_always')">
-                  <CheckCheck class="size-4" /> Always allow
+                  <CheckCheck class="size-4" /> {{ t('permission.alwaysAllow') }}
                 </Button>
               </CardFooter>
             </Card>
@@ -847,7 +824,7 @@ connect();
           </div>
           <div class="space-y-1.5">
             <h2 class="text-2xl font-semibold tracking-tight">{{ greeting }}</h2>
-            <p class="text-muted-foreground">Ask Claude about your Home Assistant configuration, automations and entities.</p>
+            <p class="text-muted-foreground">{{ t('empty.intro') }}</p>
           </div>
           <div class="mt-2 flex w-full flex-col gap-2">
             <button
@@ -896,7 +873,7 @@ connect();
                 <button
                   type="button"
                   class="absolute right-0.5 top-0.5 grid size-5 place-items-center rounded-full bg-background/90 text-muted-foreground shadow-sm hover:text-foreground"
-                  title="Remove"
+                  :title="t('composer.remove')"
                   @click="removeFile(f.key)"
                 >
                   <X class="size-3" />
@@ -906,7 +883,7 @@ connect();
             <Textarea
               v-model="draft"
               :rows="1"
-              :placeholder="queueing ? 'Add to what Claude is doing…' : 'Ask Claude about your Home Assistant setup…'"
+              :placeholder="queueing ? t('composer.placeholderQueue') : t('composer.placeholder')"
               class="min-h-[52px] max-h-52 resize-none border-0 bg-transparent px-4 pt-3.5 text-base shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
               @keydown="onKey"
               @paste="onPaste"
@@ -918,7 +895,7 @@ connect();
                   size="icon"
                   variant="ghost"
                   class="size-8 shrink-0 text-muted-foreground"
-                  title="Attach screenshots or files"
+                  :title="t('composer.attach')"
                   @click="fileInput?.click()"
                 >
                   <Paperclip class="size-4" />
@@ -927,7 +904,7 @@ connect();
                   <SelectTrigger
                     size="sm"
                     class="h-8 min-w-0 max-w-[45%] gap-1.5 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-accent focus-visible:ring-0 data-[state=open]:bg-accent"
-                    title="Model"
+                    :title="t('composer.model')"
                   >
                     <Sparkles class="size-3.5 shrink-0" />
                     <span class="truncate">{{ currentModelLabel }}</span>
@@ -944,7 +921,7 @@ connect();
                   <SelectTrigger
                     size="sm"
                     class="h-8 min-w-0 gap-1.5 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-accent focus-visible:ring-0 data-[state=open]:bg-accent"
-                    title="Permission mode"
+                    :title="t('composer.permissionMode')"
                   >
                     <ShieldAlert class="size-3.5 shrink-0" />
                     <span class="hidden truncate sm:inline">{{ modeLabel(currentSession?.permissionMode) }}</span>
@@ -956,14 +933,14 @@ connect();
               </div>
 
               <div class="flex shrink-0 items-center gap-2">
-                <Button v-if="busy" size="icon" variant="secondary" class="size-9 rounded-full" title="Stop" @click="interrupt">
+                <Button v-if="busy" size="icon" variant="secondary" class="size-9 rounded-full" :title="t('composer.stop')" @click="interrupt">
                   <Square class="size-4 fill-current" />
                 </Button>
                 <Button
                   size="icon"
                   class="size-9 rounded-full transition-transform active:scale-95 disabled:opacity-40"
                   :disabled="!canSend"
-                  :title="queueing ? 'Send: Claude reads it at its next step' : 'Send'"
+                  :title="queueing ? t('composer.sendQueue') : t('composer.send')"
                   @click="submit"
                 >
                   <ArrowUp class="size-5" />
@@ -971,7 +948,7 @@ connect();
               </div>
             </div>
           </div>
-          <p class="mt-1.5 text-center text-[11px] text-muted-foreground">Enter to send · Shift + Enter for a new line · Paste or drop screenshots and files</p>
+          <p class="mt-1.5 text-center text-[11px] text-muted-foreground">{{ t('composer.hint') }}</p>
         </div>
       </div>
     </main>
@@ -980,46 +957,46 @@ connect();
     <Dialog v-model:open="setupOpen">
       <DialogContent class="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Authentication</DialogTitle>
-          <DialogDescription>{{ isOauth ? 'Claude subscription (OAuth token)' : 'Static API key' }}</DialogDescription>
+          <DialogTitle>{{ t('setup.title') }}</DialogTitle>
+          <DialogDescription>{{ isOauth ? t('setup.oauthDescription') : t('setup.apiKeyDescription') }}</DialogDescription>
         </DialogHeader>
 
         <div v-if="isOauth" class="space-y-4 text-sm">
-          <p>This add-on signs in with a Claude subscription. Generate a token once and paste it into the add-on options.</p>
+          <p>{{ t('setup.oauthIntro') }}</p>
           <ol class="list-decimal space-y-2 pl-5 marker:text-muted-foreground">
-            <li>On any computer with Claude Code, signed in to your Claude Pro, Max, Team or Enterprise account, run:</li>
+            <li>{{ t('setup.oauthStep1') }}</li>
           </ol>
           <pre class="overflow-auto rounded-lg bg-muted p-2.5 text-xs">claude setup-token</pre>
           <ol class="list-decimal space-y-2 pl-5 marker:text-muted-foreground" start="2">
-            <li>Approve the browser login. It prints a long-lived token (valid about a year).</li>
-            <li>In Home Assistant, open Settings → Add-ons → Claude for Home Assistant → Configuration, set the OAuth token, then restart the add-on.</li>
+            <li>{{ t('setup.oauthStep2') }}</li>
+            <li>{{ t('setup.oauthStep3') }}</li>
           </ol>
           <Alert
             :variant="authConfigured ? 'default' : 'destructive'"
             :class="authConfigured ? 'border-success/40 text-success [&>svg]:text-success' : ''"
           >
             <component :is="authConfigured ? CircleCheck : CircleAlert" />
-            <AlertTitle>{{ authConfigured ? 'A token is configured' : 'No token configured yet' }}</AlertTitle>
+            <AlertTitle>{{ authConfigured ? t('setup.tokenConfigured') : t('setup.tokenMissing') }}</AlertTitle>
           </Alert>
         </div>
 
         <div v-else class="space-y-3 text-sm">
-          <p>This add-on is using a static Anthropic API key, billed to your API account.</p>
+          <p>{{ t('setup.apiKeyIntro') }}</p>
           <p class="text-muted-foreground">
-            To use your Claude subscription instead, set the authentication method to <code>oauth</code> in the add-on
-            options and follow the <code>claude setup-token</code> steps.
+            {{ t('setup.apiKeySwitchBefore') }} <code>oauth</code> {{ t('setup.apiKeySwitchMiddle') }}
+            <code>claude setup-token</code> {{ t('setup.apiKeySwitchAfter') }}
           </p>
           <Alert
             :variant="authConfigured ? 'default' : 'destructive'"
             :class="authConfigured ? 'border-success/40 text-success [&>svg]:text-success' : ''"
           >
             <component :is="authConfigured ? CircleCheck : CircleAlert" />
-            <AlertTitle>{{ authConfigured ? 'An API key is configured' : 'No API key configured yet' }}</AlertTitle>
+            <AlertTitle>{{ authConfigured ? t('setup.apiKeyConfigured') : t('setup.apiKeyMissing') }}</AlertTitle>
           </Alert>
         </div>
 
         <DialogFooter>
-          <Button variant="secondary" @click="setupOpen = false">Close</Button>
+          <Button variant="secondary" @click="setupOpen = false">{{ t('setup.close') }}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

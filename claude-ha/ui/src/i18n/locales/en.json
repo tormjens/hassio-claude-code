@@ -1,0 +1,169 @@
+{
+  "app": {
+    "name": "Claude",
+    "tagline": "for Home Assistant"
+  },
+  "sidebar": {
+    "newChat": "New chat",
+    "recent": "Recent",
+    "noChats": "No chats yet",
+    "rename": "Rename",
+    "delete": "Delete",
+    "renamePrompt": "Rename chat",
+    "deleteConfirm": "Delete \"{title}\"? This cannot be undone.",
+    "closeMenu": "Close menu",
+    "openMenu": "Open menu"
+  },
+  "auth": {
+    "subscription": "Claude subscription",
+    "apiKey": "API key",
+    "connected": "Connected",
+    "notSignedIn": "Not signed in",
+    "noApiKey": "No Anthropic API key configured",
+    "oauthHelpBefore": "Run",
+    "oauthHelpAfter": "on a computer signed in to your Claude subscription, paste the token into the add-on options, then restart the add-on.",
+    "apiKeyHelp": "Add an API key under Settings → Add-ons → Claude for Home Assistant → Configuration, then restart the add-on.",
+    "howToSetUp": "How to set up"
+  },
+  "setup": {
+    "title": "Authentication",
+    "oauthDescription": "Claude subscription (OAuth token)",
+    "apiKeyDescription": "Static API key",
+    "oauthIntro": "This add-on signs in with a Claude subscription. Generate a token once and paste it into the add-on options.",
+    "oauthStep1": "On any computer with Claude Code, signed in to your Claude Pro, Max, Team or Enterprise account, run:",
+    "oauthStep2": "Approve the browser login. It prints a long-lived token (valid about a year).",
+    "oauthStep3": "In Home Assistant, open Settings → Add-ons → Claude for Home Assistant → Configuration, set the OAuth token, then restart the add-on.",
+    "tokenConfigured": "A token is configured",
+    "tokenMissing": "No token configured yet",
+    "apiKeyIntro": "This add-on is using a static Anthropic API key, billed to your API account.",
+    "apiKeySwitchBefore": "To use your Claude subscription instead, set the authentication method to",
+    "apiKeySwitchMiddle": "in the add-on options and follow the",
+    "apiKeySwitchAfter": "steps.",
+    "apiKeyConfigured": "An API key is configured",
+    "apiKeyMissing": "No API key configured yet",
+    "close": "Close"
+  },
+  "connection": {
+    "open": "Connected",
+    "connecting": "Connecting…",
+    "closed": "Reconnecting…",
+    "notConnected": "Not connected to the add-on. Reconnecting…"
+  },
+  "header": {
+    "revertChanges": "Revert changes",
+    "revert": "Revert",
+    "newChat": "New chat"
+  },
+  "empty": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening",
+    "intro": "Ask Claude about your Home Assistant configuration, automations and entities.",
+    "example1": "List all my lights and whether they are on",
+    "example2": "Show my automations and what triggers them",
+    "example3": "Check my configuration for errors"
+  },
+  "transcript": {
+    "thinking": "Thinking…",
+    "thoughtProcess": "Thought process",
+    "thoughtFor": "Thought for {seconds}s",
+    "changeNotApplied": "Change was not applied.",
+    "status": {
+      "error": "error",
+      "denied": "denied"
+    },
+    "turns": {
+      "one": "{count} turn",
+      "other": "{count} turns"
+    }
+  },
+  "tools": {
+    "Read": "Read",
+    "Write": "Write",
+    "Edit": "Edit",
+    "Bash": "Run",
+    "Grep": "Search",
+    "Glob": "Find files",
+    "WebFetch": "Fetch",
+    "WebSearch": "Search the web",
+    "TodoWrite": "Update todos",
+    "Agent": "Agent",
+    "ha_get_states": "Get states",
+    "ha_get_services": "Get services",
+    "ha_call_service": "Call service",
+    "ha_check_config": "Check configuration",
+    "ha_reload": "Reload",
+    "ha_restart_core": "Restart Home Assistant",
+    "ha_get_logs": "Read logs",
+    "ha_list_integrations": "List integrations",
+    "ha_get_areas_devices": "Areas and devices",
+    "ha_render_template": "Render template",
+    "ha_list_secret_keys": "List secret keys",
+    "grepIn": "{pattern} in {path}",
+    "todoItems": {
+      "one": "{count} item",
+      "other": "{count} items"
+    }
+  },
+  "question": {
+    "title": "Claude needs your input",
+    "progress": "Question {current} of {total}",
+    "selectAll": "Select all that apply",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit answer"
+  },
+  "permission": {
+    "wantsToUse": "Claude wants to use {tool}",
+    "approve": "Approve",
+    "deny": "Deny",
+    "alwaysAllow": "Always allow"
+  },
+  "modes": {
+    "ask": "Ask every time",
+    "acceptEdits": "Auto-approve edits",
+    "plan": "Plan only"
+  },
+  "composer": {
+    "placeholder": "Ask Claude about your Home Assistant setup…",
+    "placeholderQueue": "Add to what Claude is doing…",
+    "attach": "Attach screenshots or files",
+    "remove": "Remove",
+    "model": "Model",
+    "defaultModel": "Default model",
+    "permissionMode": "Permission mode",
+    "stop": "Stop",
+    "send": "Send",
+    "sendQueue": "Send: Claude reads it at its next step",
+    "hint": "Enter to send · Shift + Enter for a new line · Paste or drop screenshots and files",
+    "tooManyFiles": "At most {max} files per message.",
+    "uploadFailed": "Upload failed ({status})"
+  },
+  "usage": {
+    "title": "Usage limits",
+    "refresh": "Refresh",
+    "limitReached": "Usage limit reached.",
+    "approaching": "Approaching your usage limit.",
+    "resets": "Resets {when}",
+    "resetsSentence": "Resets {when}.",
+    "now": "now",
+    "inMinutes": "in {minutes} min",
+    "inHours": "in {hours} h {minutes} min",
+    "extraUsage": "Extra usage",
+    "extraOf": "{used} of {limit}",
+    "updatedJustNow": "Updated just now",
+    "updatedMinutesAgo": "Updated {minutes} min ago",
+    "updatedAt": "Updated {time}",
+    "updating": "Updating…",
+    "fetching": "Fetching usage…",
+    "hint": "Shown after Claude's next reply, or press refresh.",
+    "windows": {
+      "five_hour": "Current session",
+      "seven_day": "Weekly · all models",
+      "seven_day_opus": "Weekly · Opus",
+      "seven_day_sonnet": "Weekly · Sonnet",
+      "seven_day_oauth_apps": "Weekly · apps",
+      "seven_day_overage_included": "Weekly · included models"
+    }
+  }
+}

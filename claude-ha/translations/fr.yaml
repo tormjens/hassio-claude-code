@@ -1,0 +1,52 @@
+configuration:
+  auth_method:
+    name: Méthode d'authentification
+    description: >-
+      « oauth » (recommandé) utilise un abonnement Claude : exécutez
+      `claude setup-token` sur un ordinateur connecté à votre compte Claude Pro,
+      Max, Team ou Enterprise et collez le jeton ci-dessous. « api_key » utilise
+      une clé API Anthropic statique, facturée sur votre compte API.
+  oauth_token:
+    name: Jeton OAuth de l'abonnement
+    description: >-
+      Jeton obtenu avec `claude setup-token`. La commande ouvre une connexion
+      dans le navigateur avec votre abonnement Claude et affiche un jeton longue
+      durée (valable environ un an). Utilisé uniquement lorsque la méthode
+      d'authentification est « oauth ».
+  anthropic_api_key:
+    name: Clé API Anthropic (ancienne méthode)
+    description: >-
+      Utilisée uniquement lorsque la méthode d'authentification est « api_key ».
+      Clé API issue de la Claude Console. L'utilisation est facturée sur votre
+      compte Anthropic. Laissez vide si vous passez par une passerelle qui gère
+      elle-même l'authentification.
+  anthropic_base_url:
+    name: URL de base de l'API
+    description: >-
+      Facultatif. Envoie les requêtes vers un point d'accès ou une passerelle
+      compatible Anthropic au lieu de api.anthropic.com.
+  log_level:
+    name: Niveau de journalisation
+    description: Niveau de détail du journal de l'add-on.
+  auto_approve_readonly_tools:
+    name: Approuver automatiquement les outils Home Assistant en lecture seule
+    description: >-
+      Si activé, les outils qui ne font que lire Home Assistant (états,
+      services, pièces, journaux, modèles) s'exécutent sans demande
+      d'autorisation. Les écritures suivent toujours le mode d'autorisation
+      choisi dans la discussion.
+  send_while_working:
+    name: Envoyer des messages pendant que Claude travaille
+    description: >-
+      Si activé, vous pouvez continuer à écrire pendant que Claude travaille.
+      Claude lit le nouveau message à sa prochaine étape, ou juste après avoir
+      terminé. Désactivez pour bloquer l'envoi jusqu'à la fin de la réponse en
+      cours.
+  idle_sleep_minutes:
+    name: Arrêter les discussions inactives après (minutes)
+    description: >-
+      Chaque discussion exécute son propre processus Claude Code, qui occupe
+      quelques centaines de Mo de mémoire. Après ce nombre de minutes sans
+      activité, le processus s'arrête ; le message suivant le relance sur la
+      même conversation, avec quelques secondes de délai. 0 garde tous les
+      processus actifs.
