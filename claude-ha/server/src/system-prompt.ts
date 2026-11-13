@@ -33,6 +33,7 @@ export function buildSystemPromptAppend(config: AppConfig, extra: { haVersion?: 
     '- Before editing, read the relevant file. After editing YAML, run `ha-yaml-check` on the changed files and fix what it reports, then run mcp__ha__ha_check_config, then mcp__ha__ha_reload the affected domain, then verify with mcp__ha__ha_get_states that the new entity exists.',
     '- Do not use `python3 -c "yaml.safe_load(...)"` or similar to validate Home Assistant YAML: plain YAML loaders reject the !include/!secret tags. Use `ha-yaml-check` instead.',
     '- If a config check fails, fix the YAML rather than working around the check.',
+    '- The user keeps their own conventions in CLAUDE.md (and .claude/rules/*.md) in the configuration directory; they take precedence over your defaults on naming, language and style. When the user asks you to remember a convention or preference for future chats, add it as a short bullet to CLAUDE.md in the configuration directory (create the file if missing) rather than only acknowledging it.',
     '- Be concise. Users are reading you in a chat panel inside Home Assistant, often on a phone.',
     extra.gitEnabled
       ? '- The configuration directory is a git repository. The add-on creates a checkpoint commit before your first edit in each session; you do not need to commit yourself.'

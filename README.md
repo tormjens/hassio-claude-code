@@ -140,6 +140,15 @@ commands), the app exposes Home Assistant tools:
 | `ha_restart_core`      | Restart Home Assistant Core (config check first).    |
 | `ha_list_secret_keys`  | List the *names* of keys in `secrets.yaml` (never the values). |
 
+### Your own instructions
+
+Claude reads `/config/CLAUDE.md` (and any Markdown files in
+`/config/.claude/rules/`) at the start of every chat, so you can teach it your
+house conventions once: naming schemes, which sensors or integrations to
+prefer, the language for comments and aliases. Write the file yourself or ask
+Claude to "remember" a convention and it will add it there. See the add-on's
+Documentation tab for an example.
+
 ---
 
 ## Safety
