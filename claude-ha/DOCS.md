@@ -67,6 +67,32 @@ reply at no extra cost. The refresh button fetches them on demand by sending a
 one-token request, which counts (negligibly) toward your usage. A warning
 appears when you are close to a limit. Hidden when you use an API key.
 
+## Your own instructions
+
+Claude reads `CLAUDE.md` in your configuration folder (`/config/CLAUDE.md`)
+at the start of every chat and follows it. Put your house conventions there:
+how you name things, which entities or integrations to prefer, the language
+for comments. For example:
+
+```markdown
+# House conventions
+
+- I write to you in French, but write all YAML comments, aliases and
+  descriptions in English.
+- Use the cached sensors (`sensor.cache_*`) instead of the original ones.
+- Name automations `<Area> - <Trigger> - <Action>`, for example
+  "Kitchen - Motion - Lights on".
+- Store persistent values with <your integration>; do not create helpers or
+  files for that.
+```
+
+Edit the file with the File editor or Studio Code Server, or simply ask
+Claude: "Remember that I name automations like this, add it to CLAUDE.md."
+For longer setups you can split the rules into several Markdown files under
+`/config/.claude/rules/`. Changes apply to chats started (or woken from idle)
+after you save the file. When change tracking is on, `CLAUDE.md` is
+versioned with the rest of your configuration.
+
 ## Configuration options
 
 | Option                        | Default  | Description                                                                                     |
