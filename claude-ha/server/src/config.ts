@@ -60,9 +60,16 @@ function readVersion(): string {
   }
 }
 
-function envMinutes(name: string, fallback: number): number {
+/**
+ * The schema caps the option at a day, and this repeats the cap for a value
+ * that reached the env some other way: setTimeout treats anything past 2^31-1
+ * ms (about 24.8 days) as 1 ms, so "practically never" would mean "at once".
+ */
+const MAX_IDLE_SLEEP_MINUTES = 1440;
+
+function envMinutes(name: string, fallback: number, max: number): number {
   const v = Number(process.env[name] || fallback);
-  return Number.isFinite(v) && v >= 0 ? v : fallback;
+  return Number.isFinite(v) && v >= 0 ? Math.min(v, max) : fallback;
 }
 
 function envBool(name: string, fallback: boolean): boolean {
@@ -107,7 +114,7 @@ export function loadConfig(): AppConfig {
     supervisorUrl: process.env.SUPERVISOR_URL ?? 'http://supervisor',
     autoApproveReadOnly: envBool('CLAUDE_HA_AUTO_APPROVE_READONLY', true),
     sendWhileWorking: envBool('CLAUDE_HA_SEND_WHILE_WORKING', true),
-    idleSleepMinutes: envMinutes('CLAUDE_HA_IDLE_SLEEP_MINUTES', 10),
+    idleSleepMinutes: envMinutes('CLAUDE_HA_IDLE_SLEEP_MINUTES', 10, MAX_IDLE_SLEEP_MINUTES),
     version: readVersion(),
   };
 }

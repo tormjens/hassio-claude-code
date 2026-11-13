@@ -1,7 +1,7 @@
 # Home Assistant add-on manifest.
 # Reference: https://developers.home-assistant.io/docs/apps/configuration
 name: Claude for Home Assistant
-version: 0.1.14
+version: 0.1.15
 slug: claude_ha
 description: Chat with Claude to read, edit and validate your Home Assistant configuration
 url: https://github.com/tormjens/hassio-claude-code
@@ -59,4 +59,4 @@ schema:
   log_level: list(debug|info|warning|error)
   auto_approve_readonly_tools: bool
   send_while_working: bool
-  idle_sleep_minutes: int(0,)
+  idle_sleep_minutes: int(0,1440)

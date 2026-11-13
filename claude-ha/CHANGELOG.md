@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.15
+
+- Fix a message sent just as an idle chat was being put to sleep: the old
+  process exiting marked the new reply as finished and dropped any message
+  queued behind it, so the chat looked idle while Claude was still working.
+- `idle_sleep_minutes` now stops at 1440 (a day). A larger number used to make
+  idle chats stop almost at once, because Node fires a timer longer than about
+  24.8 days after 1 ms. Use `0` to keep processes running.
+- The add-on log states the idle timeout at startup.
+
 ## 0.1.14
 
 - A chat left alone for ten minutes stops its Claude Code process, which held
