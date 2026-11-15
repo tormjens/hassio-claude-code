@@ -75,6 +75,8 @@ export interface AgentDeps {
   onModels?: (models: ModelInfo[]) => void;
   /** Called with the plan's rate-limit state the CLI reads from each model response. */
   onRateLimit?: (info: SDKRateLimitInfo) => void;
+  /** The SDK's `query()`; tests pass a fake so no Claude Code process starts. */
+  query?: typeof query;
 }
 
 /** Environment for the Claude Code subprocess. */
@@ -547,7 +549,7 @@ export class SessionRuntime {
       stderr: (data) => log.debug(`[claude ${this.id.slice(0, 8)}] ${data.trimEnd()}`),
     };
 
-    const q = query({ prompt: this.input, options });
+    const q = (this.deps.query ?? query)({ prompt: this.input, options });
     this.q = q;
     this.consuming = this.consume(q);
   }
@@ -564,13 +566,16 @@ export class SessionRuntime {
         this.note('error', `Claude stopped unexpectedly: ${msg}`);
       }
     } finally {
-      if (this.q === q) {
+      // close() clears this.q before the old process exits, and a message sent
+      // in between starts a new one. The transcript, queue and status then
+      // belong to that newer query, so leave them alone.
+      if (this.q === q || this.q === undefined) {
         this.q = undefined;
         this.input = undefined;
+        this.finishOpenItems();
+        this.queued.clear();
+        this.setStatus('idle');
       }
-      this.finishOpenItems();
-      this.queued.clear();
-      this.setStatus('idle');
     }
   }
 

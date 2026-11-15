@@ -494,6 +494,9 @@ wss.on('connection', async (ws) => {
 server.listen(config.port, '0.0.0.0', () => {
   log.info(`Claude for Home Assistant ${config.version} listening on :${config.port}`);
   log.info(`config dir: ${config.configDir}, data dir: ${config.dataDir}, ui: ${config.publicDir}`);
+  // Printed so a misspelt variable in the run script, which silently yields the
+  // default, shows up as the wrong number here.
+  log.info(`idle chats stop after: ${config.idleSleepMinutes ? `${config.idleSleepMinutes} min` : 'never'}`);
   if (config.authMethod === 'oauth') {
     log.info('auth: subscription OAuth token');
     if (!config.oauthToken && !config.anthropicBaseUrl) {

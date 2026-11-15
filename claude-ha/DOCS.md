@@ -105,7 +105,7 @@ versioned with the rest of your configuration.
 | `log_level`                   | `info`   | `debug`, `info`, `warning`, `error`.                                                            |
 | `auto_approve_readonly_tools` | `true`   | Run read-only Home Assistant tools (states, services, areas, logs, templates) and the offline YAML check without a prompt. |
 | `send_while_working`          | `true`   | Allow sending while Claude is working; it reads the message at its next step or right after finishing. Off: wait for the reply. |
-| `idle_sleep_minutes`          | `10`     | Stop a chat's Claude Code process (a few hundred MB) after this many idle minutes; the next message resumes the conversation. `0`: never. |
+| `idle_sleep_minutes`          | `10`     | Stop a chat's Claude Code process (a few hundred MB) after this many idle minutes; the next message resumes the conversation. `0`: never; at most `1440`. |
 
 ## Safety
 
