@@ -1,0 +1,169 @@
+{
+  "app": {
+    "name": "Claude",
+    "tagline": "for Home Assistant"
+  },
+  "sidebar": {
+    "newChat": "Ny samtale",
+    "recent": "Nylige",
+    "noChats": "Ingen samtaler ennå",
+    "rename": "Gi nytt navn",
+    "delete": "Slett",
+    "renamePrompt": "Gi samtalen nytt navn",
+    "deleteConfirm": "Slette «{title}»? Dette kan ikke angres.",
+    "closeMenu": "Lukk menyen",
+    "openMenu": "Åpne menyen"
+  },
+  "auth": {
+    "subscription": "Claude-abonnement",
+    "apiKey": "API-nøkkel",
+    "connected": "Tilkoblet",
+    "notSignedIn": "Ikke logget inn",
+    "noApiKey": "Ingen Anthropic API-nøkkel er satt opp",
+    "oauthHelpBefore": "Kjør",
+    "oauthHelpAfter": "på en datamaskin som er logget inn på Claude-abonnementet ditt, lim inn tokenet i innstillingene for tillegget, og start tillegget på nytt.",
+    "apiKeyHelp": "Legg inn en API-nøkkel under Innstillinger → Tillegg → Claude for Home Assistant → Konfigurasjon, og start tillegget på nytt.",
+    "howToSetUp": "Slik setter du det opp"
+  },
+  "setup": {
+    "title": "Autentisering",
+    "oauthDescription": "Claude-abonnement (OAuth-token)",
+    "apiKeyDescription": "Statisk API-nøkkel",
+    "oauthIntro": "Dette tillegget logger inn med et Claude-abonnement. Lag et token én gang og lim det inn i innstillingene for tillegget.",
+    "oauthStep1": "På en hvilken som helst datamaskin med Claude Code, logget inn på Claude Pro-, Max-, Team- eller Enterprise-kontoen din, kjør:",
+    "oauthStep2": "Godkjenn innloggingen i nettleseren. Den skriver ut et langvarig token (gyldig i omtrent ett år).",
+    "oauthStep3": "Åpne Innstillinger → Tillegg → Claude for Home Assistant → Konfigurasjon i Home Assistant, legg inn OAuth-tokenet, og start tillegget på nytt.",
+    "tokenConfigured": "Et token er satt opp",
+    "tokenMissing": "Ingen token er satt opp ennå",
+    "apiKeyIntro": "Dette tillegget bruker en statisk Anthropic API-nøkkel, som faktureres API-kontoen din.",
+    "apiKeySwitchBefore": "For å bruke Claude-abonnementet ditt i stedet, sett autentiseringsmetoden til",
+    "apiKeySwitchMiddle": "i innstillingene for tillegget og følg stegene for",
+    "apiKeySwitchAfter": "i dokumentasjonen.",
+    "apiKeyConfigured": "En API-nøkkel er satt opp",
+    "apiKeyMissing": "Ingen API-nøkkel er satt opp ennå",
+    "close": "Lukk"
+  },
+  "connection": {
+    "open": "Tilkoblet",
+    "connecting": "Kobler til…",
+    "closed": "Kobler til på nytt…",
+    "notConnected": "Ikke koblet til tillegget. Kobler til på nytt…"
+  },
+  "header": {
+    "revertChanges": "Angre endringer",
+    "revert": "Angre",
+    "newChat": "Ny samtale"
+  },
+  "empty": {
+    "morning": "God morgen",
+    "afternoon": "God ettermiddag",
+    "evening": "God kveld",
+    "intro": "Spør Claude om Home Assistant-konfigurasjonen, automasjonene og entitetene dine.",
+    "example1": "List opp alle lysene mine og om de er på",
+    "example2": "Vis automasjonene mine og hva som utløser dem",
+    "example3": "Sjekk konfigurasjonen min for feil"
+  },
+  "transcript": {
+    "thinking": "Tenker…",
+    "thoughtProcess": "Tankeprosess",
+    "thoughtFor": "Tenkte i {seconds} s",
+    "changeNotApplied": "Endringen ble ikke tatt i bruk.",
+    "status": {
+      "error": "feil",
+      "denied": "avvist"
+    },
+    "turns": {
+      "one": "{count} runde",
+      "other": "{count} runder"
+    }
+  },
+  "tools": {
+    "Read": "Les",
+    "Write": "Skriv",
+    "Edit": "Rediger",
+    "Bash": "Kjør",
+    "Grep": "Søk",
+    "Glob": "Finn filer",
+    "WebFetch": "Hent",
+    "WebSearch": "Søk på nettet",
+    "TodoWrite": "Oppdater gjøremål",
+    "Agent": "Agent",
+    "ha_get_states": "Hent tilstander",
+    "ha_get_services": "Hent tjenester",
+    "ha_call_service": "Kall tjeneste",
+    "ha_check_config": "Sjekk konfigurasjonen",
+    "ha_reload": "Last inn på nytt",
+    "ha_restart_core": "Start Home Assistant på nytt",
+    "ha_get_logs": "Les logger",
+    "ha_list_integrations": "List integrasjoner",
+    "ha_get_areas_devices": "Områder og enheter",
+    "ha_render_template": "Gjengi mal",
+    "ha_list_secret_keys": "List hemmelige nøkler",
+    "grepIn": "{pattern} i {path}",
+    "todoItems": {
+      "one": "{count} punkt",
+      "other": "{count} punkter"
+    }
+  },
+  "question": {
+    "title": "Claude trenger svar fra deg",
+    "progress": "Spørsmål {current} av {total}",
+    "selectAll": "Velg alle som passer",
+    "back": "Tilbake",
+    "next": "Neste",
+    "submit": "Send svar"
+  },
+  "permission": {
+    "wantsToUse": "Claude vil bruke {tool}",
+    "approve": "Godkjenn",
+    "deny": "Avslå",
+    "alwaysAllow": "Tillat alltid"
+  },
+  "modes": {
+    "ask": "Spør hver gang",
+    "acceptEdits": "Godkjenn endringer automatisk",
+    "plan": "Bare planlegg"
+  },
+  "composer": {
+    "placeholder": "Spør Claude om Home Assistant-oppsettet ditt…",
+    "placeholderQueue": "Legg til noe i det Claude jobber med…",
+    "attach": "Legg ved skjermbilder eller filer",
+    "remove": "Fjern",
+    "model": "Modell",
+    "defaultModel": "Standardmodell",
+    "permissionMode": "Tillatelsesmodus",
+    "stop": "Stopp",
+    "send": "Send",
+    "sendQueue": "Send: Claude leser det ved neste steg",
+    "hint": "Enter for å sende · Shift + Enter for ny linje · Lim inn eller slipp skjermbilder og filer",
+    "tooManyFiles": "Maks {max} filer per melding.",
+    "uploadFailed": "Opplastingen mislyktes ({status})"
+  },
+  "usage": {
+    "title": "Bruksgrenser",
+    "refresh": "Oppdater",
+    "limitReached": "Bruksgrensen er nådd.",
+    "approaching": "Du nærmer deg bruksgrensen.",
+    "resets": "Tilbakestilles {when}",
+    "resetsSentence": "Tilbakestilles {when}.",
+    "now": "nå",
+    "inMinutes": "om {minutes} min",
+    "inHours": "om {hours} t {minutes} min",
+    "extraUsage": "Ekstra bruk",
+    "extraOf": "{used} av {limit}",
+    "updatedJustNow": "Oppdatert akkurat nå",
+    "updatedMinutesAgo": "Oppdatert for {minutes} min siden",
+    "updatedAt": "Oppdatert {time}",
+    "updating": "Oppdaterer…",
+    "fetching": "Henter bruk…",
+    "hint": "Vises etter Claudes neste svar, eller trykk på oppdater.",
+    "windows": {
+      "five_hour": "Gjeldende økt",
+      "seven_day": "Ukentlig · alle modeller",
+      "seven_day_opus": "Ukentlig · Opus",
+      "seven_day_sonnet": "Ukentlig · Sonnet",
+      "seven_day_oauth_apps": "Ukentlig · apper",
+      "seven_day_overage_included": "Ukentlig · inkluderte modeller"
+    }
+  }
+}
